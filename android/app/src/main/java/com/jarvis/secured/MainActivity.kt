@@ -1,6 +1,8 @@
 package com.jarvis.secured
 
 import android.os.Bundle
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.widget.Button
 import android.widget.EditText
@@ -15,7 +17,6 @@ import org.json.JSONObject
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.Signature
-import java.security.spec.ECGenParameterSpec
 
 class MainActivity : AppCompatActivity() {
     private val http = OkHttpClient()
@@ -38,9 +39,14 @@ class MainActivity : AppCompatActivity() {
     private fun ensureKeyPair() {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         if (ks.containsAlias(KEY_ALIAS)) return
-        val gen = KeyPairGenerator.getInstance("EC", "AndroidKeyStore")
-        gen.initialize(ECGenParameterSpec("secp256r1"))
-        gen.generateKeyPair().also { /* private key remains in Android Keystore */ }
+        val spec = KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_SIGN)
+            .setAlgorithmParameterSpec(java.security.spec.ECGenParameterSpec("secp256r1"))
+            .setDigests(KeyProperties.DIGEST_SHA256)
+            .build()
+        KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore").apply {
+            initialize(spec)
+            generateKeyPair()
+        }
     }
 
     private fun publicKeyPem(): String {
@@ -76,8 +82,7 @@ class MainActivity : AppCompatActivity() {
                     val obj = JSONObject(body)
                     val deviceId = obj.getString("device_id")
                     val challenge = obj.getString("challenge")
-                    val prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
-                    prefs.edit().putString("device_id", deviceId).apply()
+                    getSharedPreferences("jarvis", MODE_PRIVATE).edit().putString("device_id", deviceId).apply()
                     authenticate(deviceId, challenge)
                 }
             } catch (e: Exception) {
