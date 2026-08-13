@@ -1,0 +1,40 @@
+name: Windows host build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, v0.1-secure-pairing]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install host dependencies
+        run: python -m pip install --upgrade pip && pip install -r host/requirements.txt pyinstaller
+      - name: Build Windows host executable
+        run: pyinstaller --noconfirm --clean --onefile --noconsole --name JARVIS-Host --paths host --collect-all uvicorn --collect-all fastapi host/run_host.py
+      - name: Prepare package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item dist/JARVIS-Host.exe package/JARVIS-Host.exe
+          @'
+          JARVIS Secure Host
+
+          Run JARVIS-Host.exe, then open http://127.0.0.1:8766 for the local dashboard.
+          The secure gateway listens on TCP 8765.
+
+          For internet access, use a TLS reverse proxy or secure tunnel. Do not expose
+          the local admin dashboard (8766) publicly.
+          '@ | Set-Content package/README.txt
+          Compress-Archive -Path package/* -DestinationPath JARVIS-Windows-Host.zip -Force
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-windows-host
+          path: JARVIS-Windows-Host.zip
+          if-no-files-found: error
