@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 from html import escape
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -7,13 +8,28 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from .store import Store, ALL_SCOPES
 from . import tunnel
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.3.0")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.3.1")
 store = Store()
 current_pairing_code = ""
 
 
 def _checked(scopes: list[str], name: str) -> str:
     return "checked" if name in scopes else ""
+
+
+def _lan_ip() -> str:
+    """Best-effort LAN IPv4 discovery without making an external connection."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("10.255.255.255", 1))
+        return sock.getsockname()[0]
+    except OSError:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except OSError:
+            return "Unavailable"
+    finally:
+        sock.close()
 
 
 @admin_app.get("/", response_class=HTMLResponse)
@@ -34,23 +50,41 @@ def dashboard():
         <td><form method='post' action='/devices/{escape(device['device_id'])}/revoke'><button class='danger'>Revoke</button></form></td></tr>
         """)
 
+    lan_ip = _lan_ip()
+    local_gateway = "http://127.0.0.1:8765"
+    lan_gateway = f"http://{lan_ip}:8765" if lan_ip != "Unavailable" else "Unavailable"
+    admin_url = "http://127.0.0.1:8766"
     remote_url = tunnel.public_url or "Waiting for tunnel…"
     online_class = "online" if tunnel.status == "online" else "warn"
     error_html = f"<p class='error'>{escape(tunnel.last_error)}</p>" if tunnel.last_error else ""
+
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <meta http-equiv='refresh' content='5'>
-<title>JARVIS v0.3</title>
+<title>JARVIS v0.3.1</title>
 <style>
 :root{{color-scheme:dark}}body{{font-family:system-ui;background:#080c12;color:#edf2f7;max-width:1200px;margin:0 auto;padding:32px 20px}}
 .card{{background:#111824;border:1px solid #263346;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 12px 40px #0004}}
 .code{{font-size:44px;letter-spacing:9px;font-weight:800}}.small{{color:#93a1b1}}code.url{{font-size:18px;word-break:break-all}}
 .badge{{display:inline-block;padding:6px 10px;border-radius:999px;background:#173b2a;color:#8ff0b0}}.warn{{background:#4a3814;color:#ffd77a}}.online{{background:#173b2a;color:#8ff0b0}}.error{{color:#ff9ca8}}
+.route-grid{{display:grid;grid-template-columns:180px 1fr;gap:12px 18px;align-items:center}}.route-label{{color:#93a1b1}}.route-value{{background:#0b111a;border:1px solid #263346;border-radius:10px;padding:10px 12px;word-break:break-all}}
 table{{width:100%;border-collapse:collapse}}td,th{{text-align:left;padding:14px;border-bottom:1px solid #263346;vertical-align:top}}
 .scopes{{display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:8px}}button{{border:0;border-radius:9px;padding:10px 14px;background:#2d6cdf;color:white;cursor:pointer;margin:8px 6px 0 0}}.danger{{background:#8f3340}}.secondary{{background:#374151}}
+@media(max-width:700px){{.route-grid{{grid-template-columns:1fr}}}}
 </style></head><body>
-<h1>JARVIS <span class='small'>v0.3 remote test</span></h1><p class='small'>Windows Host Dashboard · local administration only</p>
-<div class='card'><h2>Remote connection</h2><span class='{online_class} badge'>Tunnel: {escape(tunnel.status)}</span><p>Android remote host:</p><code class='url'>{escape(remote_url)}</code>{error_html}
+<h1>JARVIS <span class='small'>v0.3.1 remote test</span></h1><p class='small'>Windows Host Dashboard · local administration only</p>
+
+<div class='card'><h2>Connection routes</h2>
+<div class='route-grid'>
+<div class='route-label'>Local gateway</div><div class='route-value'><code class='url'>{escape(local_gateway)}</code></div>
+<div class='route-label'>LAN / same Wi-Fi</div><div class='route-value'><code class='url'>{escape(lan_gateway)}</code></div>
+<div class='route-label'>Remote / internet</div><div class='route-value'><code class='url'>{escape(remote_url)}</code></div>
+<div class='route-label'>Admin dashboard</div><div class='route-value'><code class='url'>{escape(admin_url)}</code></div>
+</div>
+<p class='small'>Use the LAN address when the phone is on the same network. Use the HTTPS remote address when testing over cellular or another network. The admin dashboard stays local to this PC.</p>
+</div>
+
+<div class='card'><h2>Remote connection</h2><span class='{online_class} badge'>Tunnel: {escape(tunnel.status)}</span>{error_html}
 <form method='post' action='/tunnel/restart'><button>Restart remote tunnel</button></form><p class='small'>The temporary trycloudflare.com URL is HTTPS and changes whenever the tunnel restarts. It is for testing only.</p></div>
 <div class='card'><h2>Pair a device</h2><p class='small'>This code can be used exactly once and expires after five minutes.</p><div class='code'>{escape(current_pairing_code or '—')}</div><form method='post' action='/pairing/new'><button>Generate new pairing code</button></form></div>
 <div class='card'><h2>Devices & permissions</h2><table><tr><th>Device</th><th>Status</th><th>JARVIS capabilities</th><th>Security</th></tr>{''.join(rows) or '<tr><td colspan=4>No devices paired yet.</td></tr>'}</table></div>
