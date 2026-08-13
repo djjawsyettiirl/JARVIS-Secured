@@ -48,9 +48,16 @@ def _load_public_key(pem: str):
 
 
 def _new_challenge(device_id: str) -> str:
-    challenge = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii")
+    challenge = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii").rstrip("=")
     challenges[device_id] = (challenge, time.time() + 60)
     return challenge
+
+
+def _decode_urlsafe_base64(value: str) -> bytes:
+    """Decode URL-safe base64 from clients that may omit RFC 4648 padding."""
+    normalized = value.strip()
+    normalized += "=" * (-len(normalized) % 4)
+    return base64.urlsafe_b64decode(normalized.encode("ascii"))
 
 
 @app.get("/health")
@@ -94,7 +101,7 @@ def verify(request: AuthenticateRequest):
     challenge_value, _ = record
     try:
         key = _load_public_key(row["public_key_pem"])
-        signature = base64.urlsafe_b64decode(request.signature_b64.encode("ascii"))
+        signature = _decode_urlsafe_base64(request.signature_b64)
         key.verify(signature, challenge_value.encode("utf-8"), ec.ECDSA(hashes.SHA256()))
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid device signature") from exc
