@@ -12,10 +12,8 @@ from pydantic import BaseModel, Field
 
 from .store import Store
 
-app = FastAPI(title="JARVIS Secure Host", version="0.1.0")
+app = FastAPI(title="JARVIS Secure Host", version="0.2.0")
 store = Store()
-
-# Short-lived challenges are kept in memory and are single-use.
 challenges: dict[str, tuple[str, float]] = {}
 
 
@@ -28,6 +26,7 @@ class PairRequest(BaseModel):
 class PairResponse(BaseModel):
     device_id: str
     challenge: str
+    scopes: list[str]
 
 
 class ChallengeResponse(BaseModel):
@@ -54,7 +53,6 @@ def _new_challenge(device_id: str) -> str:
 
 
 def _decode_urlsafe_base64(value: str) -> bytes:
-    """Decode URL-safe base64 from clients that may omit RFC 4648 padding."""
     normalized = value.strip()
     normalized += "=" * (-len(normalized) % 4)
     return base64.urlsafe_b64decode(normalized.encode("ascii"))
@@ -67,19 +65,15 @@ def health():
 
 @app.post("/pair", response_model=PairResponse)
 def pair(request: PairRequest):
-    # Validate the public key before consuming the one-time enrollment code.
-    # This prevents a malformed request from burning the user's pairing code.
     try:
         _load_public_key(request.public_key_pem)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid P-256 public key") from exc
-
     if not store.consume_pairing(request.code):
         raise HTTPException(status_code=401, detail="Pairing code is invalid, expired, or already used")
-
     device_id = store.add_device(request.device_name.strip(), request.public_key_pem)
     challenge = _new_challenge(device_id)
-    return PairResponse(device_id=device_id, challenge=challenge)
+    return PairResponse(device_id=device_id, challenge=challenge, scopes=store.get_scopes(device_id))
 
 
 @app.post("/auth/challenge", response_model=ChallengeResponse)
@@ -105,18 +99,19 @@ def verify(request: AuthenticateRequest):
         key.verify(signature, challenge_value.encode("utf-8"), ec.ECDSA(hashes.SHA256()))
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid device signature") from exc
-
-    # v0.1 proves device possession but intentionally does not mint a
-    # long-lived token or expose Windows control tools yet.
-    return {"authenticated": True, "device_id": request.device_id}
+    return {"authenticated": True, "device_id": request.device_id, "scopes": store.get_scopes(request.device_id)}
 
 
 @app.get("/devices")
 def devices(authorization: Annotated[str | None, Header()] = None):
-    # Local/admin UI only in v0.1. Do not expose this route through a public gateway.
     if authorization != "Bearer LOCAL_ADMIN":
         raise HTTPException(status_code=403, detail="Admin authentication required")
-    return [dict(row) for row in store.list_devices()]
+    result = []
+    for row in store.list_devices():
+        item = dict(row)
+        item["scopes"] = store.get_scopes(row["device_id"])
+        result.append(item)
+    return result
 
 
 @app.post("/devices/{device_id}/revoke")
