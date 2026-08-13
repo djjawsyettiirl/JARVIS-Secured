@@ -15,7 +15,7 @@ from .store import Store
 app = FastAPI(title="JARVIS Secure Host", version="0.1.0")
 store = Store()
 
-# Short-lived challenges are kept in memory. They are intentionally single-use.
+# Short-lived challenges are kept in memory and are single-use.
 challenges: dict[str, tuple[str, float]] = {}
 
 
@@ -60,12 +60,15 @@ def health():
 
 @app.post("/pair", response_model=PairResponse)
 def pair(request: PairRequest):
-    if not store.consume_pairing(request.code):
-        raise HTTPException(status_code=401, detail="Pairing code is invalid, expired, or already used")
+    # Validate the public key before consuming the one-time enrollment code.
+    # This prevents a malformed request from burning the user's pairing code.
     try:
         _load_public_key(request.public_key_pem)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid P-256 public key") from exc
+
+    if not store.consume_pairing(request.code):
+        raise HTTPException(status_code=401, detail="Pairing code is invalid, expired, or already used")
 
     device_id = store.add_device(request.device_name.strip(), request.public_key_pem)
     challenge = _new_challenge(device_id)
@@ -96,14 +99,14 @@ def verify(request: AuthenticateRequest):
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid device signature") from exc
 
-    # v0.1 deliberately returns a placeholder. A later version will mint a
-    # short-lived signed session token with scopes instead of exposing tools here.
+    # v0.1 proves device possession but intentionally does not mint a
+    # long-lived token or expose Windows control tools yet.
     return {"authenticated": True, "device_id": request.device_id}
 
 
 @app.get("/devices")
 def devices(authorization: Annotated[str | None, Header()] = None):
-    # Local/admin UI only in v0.1. Do not expose this route through the public gateway.
+    # Local/admin UI only in v0.1. Do not expose this route through a public gateway.
     if authorization != "Bearer LOCAL_ADMIN":
         raise HTTPException(status_code=403, detail="Admin authentication required")
     return [dict(row) for row in store.list_devices()]
