@@ -3,18 +3,19 @@ from __future__ import annotations
 import base64
 import secrets
 import time
-from typing import Annotated
+from collections import defaultdict, deque
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .store import Store
 
-app = FastAPI(title="JARVIS Secure Host", version="0.2.0")
+app = FastAPI(title="JARVIS Secure Host", version="0.3.0")
 store = Store()
 challenges: dict[str, tuple[str, float]] = {}
+_pair_attempts: dict[str, deque[float]] = defaultdict(deque)
 
 
 class PairRequest(BaseModel):
@@ -58,13 +59,33 @@ def _decode_urlsafe_base64(value: str) -> bytes:
     return base64.urlsafe_b64decode(normalized.encode("ascii"))
 
 
+def _client_ip(request: Request) -> str:
+    # Cloudflare sets this header on tunneled requests. On LAN, fall back to the socket peer.
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_pair_rate_limit(request: Request) -> None:
+    ip = _client_ip(request)
+    now = time.time()
+    window = _pair_attempts[ip]
+    while window and window[0] < now - 60:
+        window.popleft()
+    if len(window) >= 10:
+        raise HTTPException(status_code=429, detail="Too many pairing attempts. Wait one minute and try again.")
+    window.append(now)
+
+
 @app.get("/health")
 def health():
     return {"status": "online", "service": "jarvis-host", "version": app.version}
 
 
 @app.post("/pair", response_model=PairResponse)
-def pair(request: PairRequest):
+def pair(request: PairRequest, http_request: Request):
+    _check_pair_rate_limit(http_request)
     try:
         _load_public_key(request.public_key_pem)
     except Exception as exc:
@@ -101,23 +122,6 @@ def verify(request: AuthenticateRequest):
         raise HTTPException(status_code=401, detail="Invalid device signature") from exc
     return {"authenticated": True, "device_id": request.device_id, "scopes": store.get_scopes(request.device_id)}
 
-
-@app.get("/devices")
-def devices(authorization: Annotated[str | None, Header()] = None):
-    if authorization != "Bearer LOCAL_ADMIN":
-        raise HTTPException(status_code=403, detail="Admin authentication required")
-    result = []
-    for row in store.list_devices():
-        item = dict(row)
-        item["scopes"] = store.get_scopes(row["device_id"])
-        result.append(item)
-    return result
-
-
-@app.post("/devices/{device_id}/revoke")
-def revoke(device_id: str, authorization: Annotated[str | None, Header()] = None):
-    if authorization != "Bearer LOCAL_ADMIN":
-        raise HTTPException(status_code=403, detail="Admin authentication required")
-    if not store.revoke_device(device_id):
-        raise HTTPException(status_code=404, detail="Device not found")
-    return {"revoked": True, "device_id": device_id}
+# IMPORTANT: device administration routes intentionally live only on the
+# separate localhost-bound admin app (port 8766). The public gateway exposes
+# only health, pairing, challenge, and verification endpoints.
