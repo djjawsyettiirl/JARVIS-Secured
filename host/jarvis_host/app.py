@@ -7,12 +7,13 @@ from collections import defaultdict, deque
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .store import Store
 
-app = FastAPI(title="JARVIS Secure Host", version="0.3.0")
+app = FastAPI(title="JARVIS Secure Host", version="0.3.1")
 store = Store()
 challenges: dict[str, tuple[str, float]] = {}
 _pair_attempts: dict[str, deque[float]] = defaultdict(deque)
@@ -53,10 +54,27 @@ def _new_challenge(device_id: str) -> str:
     return challenge
 
 
-def _decode_urlsafe_base64(value: str) -> bytes:
+def _decode_signature_base64(value: str) -> bytes:
+    """Decode Android signature text while accepting URL-safe or standard Base64."""
     normalized = value.strip()
     normalized += "=" * (-len(normalized) % 4)
-    return base64.urlsafe_b64decode(normalized.encode("ascii"))
+    try:
+        return base64.b64decode(normalized.encode("ascii"), altchars=b"-_", validate=True)
+    except Exception:
+        return base64.b64decode(normalized.encode("ascii"), validate=True)
+
+
+def _normalize_ecdsa_signature(signature: bytes) -> bytes:
+    """Return ASN.1 DER ECDSA signature bytes.
+
+    Android normally emits DER for SHA256withECDSA, but some providers/devices can
+    expose IEEE-P1363 r||s bytes. cryptography expects DER, so accept both formats.
+    """
+    if len(signature) == 64:
+        r = int.from_bytes(signature[:32], "big")
+        s = int.from_bytes(signature[32:], "big")
+        return encode_dss_signature(r, s)
+    return signature
 
 
 def _client_ip(request: Request) -> str:
@@ -116,7 +134,7 @@ def verify(request: AuthenticateRequest):
     challenge_value, _ = record
     try:
         key = _load_public_key(row["public_key_pem"])
-        signature = _decode_urlsafe_base64(request.signature_b64)
+        signature = _normalize_ecdsa_signature(_decode_signature_base64(request.signature_b64))
         key.verify(signature, challenge_value.encode("utf-8"), ec.ECDSA(hashes.SHA256()))
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid device signature") from exc
