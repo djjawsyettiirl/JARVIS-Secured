@@ -85,7 +85,16 @@ table{{width:100%;border-collapse:collapse}}td,th{{text-align:left;padding:14px;
 </div>
 
 <div class='card'><h2>Remote connection</h2><span class='{online_class} badge'>Tunnel: {escape(tunnel.status)}</span>{error_html}
-<form method='post' action='/tunnel/restart'><button>Restart remote tunnel</button></form><p class='small'>The temporary trycloudflare.com URL is HTTPS and changes whenever the tunnel restarts. It is for testing only.</p></div>
+
+<form method='get' action='/'>
+<button class='secondary'>Refresh status now</button>
+</form>
+
+<form method='post' action='/tunnel/restart'>
+<button>Restart remote tunnel</button>
+</form>
+
+<p class='small'>Refresh status re-checks the current LAN address and tunnel status without restarting JARVIS. The temporary trycloudflare.com URL is HTTPS and changes whenever the tunnel restarts. It is for testing only.</p></div>
 <div class='card'><h2>Pair a device</h2><p class='small'>This code can be used exactly once and expires after five minutes.</p><div class='code'>{escape(current_pairing_code or '—')}</div><form method='post' action='/pairing/new'><button>Generate new pairing code</button></form></div>
 <div class='card'><h2>Devices & permissions</h2><table><tr><th>Device</th><th>Status</th><th>JARVIS capabilities</th><th>Security</th></tr>{''.join(rows) or '<tr><td colspan=4>No devices paired yet.</td></tr>'}</table></div>
 <div class='card'><h2>Security</h2><span class='badge'>ECDSA P-256 device authentication enabled</span><p class='small'>Only port 8765 is proxied through the remote tunnel. This admin dashboard remains bound to 127.0.0.1:8766 and is never published.</p></div>
