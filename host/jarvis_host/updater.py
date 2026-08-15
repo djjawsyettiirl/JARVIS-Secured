@@ -127,6 +127,45 @@ class Updater:
             return False
         return self.stage_windows_restart()
 
+    def stage_android_if_available(self) -> bool:
+        """Keep the matching phone installer ready even when Windows is current."""
+        latest = self._latest("android-build.yml")
+        if not latest:
+            return False
+        target = self.update_dir / "android"
+        marker = target / ".run-id"
+        run_id = str(latest["databaseId"])
+        if self.android_apk.is_file() and marker.is_file() and marker.read_text(encoding="utf-8").strip() == run_id:
+            if self.status in {"idle", "up_to_date"}:
+                self.status = "ready"
+            return False
+        with self._lock:
+            if self.status == "downloading":
+                return False
+            self.status = "downloading"
+            self.last_error = ""
+        try:
+            self.android_run = latest
+            self._stage_android_run(latest)
+            self.status = "ready"
+            return True
+        except Exception as exc:
+            self.status = "error"
+            self.last_error = str(exc)
+            return False
+
+    def _stage_android_run(self, run: dict[str, object]) -> None:
+        target = self.update_dir / "android"
+        pending = self.update_dir / "android-next"
+        shutil.rmtree(pending, ignore_errors=True)
+        pending.mkdir(parents=True)
+        self._run("run", "download", str(run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-android-apk", "-D", str(pending))
+        if not (pending / "app-release.apk").is_file():
+            raise FileNotFoundError("The latest Android build did not contain app-release.apk")
+        (pending / ".run-id").write_text(str(run["databaseId"]), encoding="utf-8")
+        self._archive_existing(target, "android-update")
+        pending.replace(target)
+
     def _download(self) -> None:
         try:
             self.windows_run = self._latest("windows-build.yml")
@@ -140,15 +179,7 @@ class Updater:
                 self._archive_existing(target, "windows-update")
                 pending.replace(target)
             if self.android_run:
-                target = self.update_dir / "android"
-                pending = self.update_dir / "android-next"
-                shutil.rmtree(pending, ignore_errors=True)
-                pending.mkdir(parents=True)
-                self._run("run", "download", str(self.android_run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-android-apk", "-D", str(pending))
-                if not (pending / "app-release.apk").is_file():
-                    raise FileNotFoundError("The latest Android build did not contain app-release.apk")
-                self._archive_existing(target, "android-update")
-                pending.replace(target)
+                self._stage_android_run(self.android_run)
             self.status = "ready"
         except Exception as exc:
             self.status = "error"

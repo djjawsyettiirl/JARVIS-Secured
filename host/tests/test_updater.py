@@ -58,6 +58,25 @@ def test_automatic_update_skips_current_windows_build(monkeypatch):
     assert updater.auto_install_if_available() is False
 
 
+def test_android_update_is_staged_when_windows_is_already_current(monkeypatch, tmp_path):
+    updater = Updater()
+    monkeypatch.setattr(type(updater), "update_dir", property(lambda self: tmp_path))
+    latest = {"headSha": "same", "databaseId": 456}
+    monkeypatch.setattr(updater, "_latest", lambda workflow: latest)
+
+    def stage(run):
+        target = tmp_path / "android"
+        target.mkdir(parents=True)
+        (target / "app-release.apk").write_bytes(b"new apk")
+        (target / ".run-id").write_text(str(run["databaseId"]), encoding="utf-8")
+
+    monkeypatch.setattr(updater, "_stage_android_run", stage)
+
+    assert updater.stage_android_if_available() is True
+    assert updater.snapshot()["android_ready"] is True
+    assert updater.stage_android_if_available() is False
+
+
 def test_replaced_updates_move_to_old_development(monkeypatch, tmp_path):
     updater = Updater()
     archive = tmp_path / "Old Development"

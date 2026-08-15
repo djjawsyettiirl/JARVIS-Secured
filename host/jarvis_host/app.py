@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import secrets
+import socket
 import time
 from collections import defaultdict, deque
 
@@ -15,8 +16,9 @@ from pydantic import BaseModel, Field
 from .store import Store
 from .assistant import respond
 from .updater import updater
+from . import tunnel
 
-app = FastAPI(title="JARVIS Secure Host", version="0.5.3")
+app = FastAPI(title="JARVIS Secure Host", version="0.5.4")
 store = Store()
 challenges: dict[str, tuple[str, float]] = {}
 sessions: dict[str, tuple[str, float]] = {}
@@ -33,6 +35,7 @@ class PairResponse(BaseModel):
     device_id: str
     challenge: str
     scopes: list[str]
+    routes: dict[str, str]
 
 
 class ChallengeResponse(BaseModel):
@@ -135,6 +138,20 @@ def _check_pair_rate_limit(request: Request) -> None:
     window.append(now)
 
 
+def _connection_routes() -> dict[str, str]:
+    """Return every currently usable gateway without tying identity to an IP."""
+    lan = ""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("10.255.255.255", 1))
+        lan = f"http://{sock.getsockname()[0]}:8765"
+    except OSError:
+        pass
+    finally:
+        sock.close()
+    return {"lan": lan, "remote": tunnel.public_url}
+
+
 @app.get("/health")
 def health():
     return {"status": "online", "service": "jarvis-host", "version": app.version}
@@ -151,7 +168,12 @@ def pair(request: PairRequest, http_request: Request):
         raise HTTPException(status_code=401, detail="Pairing code is invalid, expired, or already used")
     device_id = store.add_device(request.device_name.strip(), request.public_key_pem)
     challenge = _new_challenge(device_id)
-    return PairResponse(device_id=device_id, challenge=challenge, scopes=store.get_scopes(device_id))
+    return PairResponse(
+        device_id=device_id,
+        challenge=challenge,
+        scopes=store.get_scopes(device_id),
+        routes=_connection_routes(),
+    )
 
 
 @app.post("/auth/challenge", response_model=ChallengeResponse)
@@ -184,7 +206,14 @@ def verify(request: AuthenticateRequest):
         "scopes": store.get_scopes(request.device_id),
         "session_token": token,
         "expires_in": expires_in,
+        "routes": _connection_routes(),
     }
+
+
+@app.get("/connection/routes")
+def connection_routes(authorization: str | None = Header(default=None)):
+    _authenticated_device(authorization)
+    return _connection_routes()
 
 
 @app.post("/assistant")

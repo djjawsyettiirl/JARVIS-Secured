@@ -61,6 +61,33 @@ def test_der_ecdsa_signature_authenticates(monkeypatch, tmp_path):
     assert response.json()["authenticated"] is True
 
 
+def test_paired_identity_authenticates_from_a_different_address(monkeypatch, tmp_path):
+    """A route or IP change must never require pairing the device again."""
+    fresh_store(monkeypatch, tmp_path)
+    client = TestClient(app)
+    key, public = key_pem()
+    code = store.create_pairing(ttl_seconds=300)
+    paired = client.post(
+        "/pair",
+        headers={"cf-connecting-ip": "198.51.100.10"},
+        json={"code": code, "device_name": "Roaming Phone", "public_key_pem": public},
+    ).json()
+    challenge = client.post(
+        f"/auth/challenge?device_id={paired['device_id']}",
+        headers={"cf-connecting-ip": "203.0.113.20"},
+    ).json()["challenge"]
+    signature = key.sign(challenge.encode(), ec.ECDSA(hashes.SHA256()))
+    response = client.post(
+        "/auth/verify",
+        headers={"cf-connecting-ip": "203.0.113.20"},
+        json={"device_id": paired["device_id"], "signature_b64": b64url(signature)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["authenticated"] is True
+    assert "routes" in response.json()
+
+
 def test_p1363_android_signature_authenticates(monkeypatch, tmp_path):
     fresh_store(monkeypatch, tmp_path)
     client = TestClient(app)

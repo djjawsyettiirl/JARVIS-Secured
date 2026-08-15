@@ -32,6 +32,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -44,11 +45,32 @@ import android.security.keystore.KeyProperties
 import java.util.concurrent.TimeUnit
 import java.util.Locale
 import java.io.File
+import java.io.IOException
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val http = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val preferred = "${original.url.scheme}://${original.url.host}:${original.url.port}"
+            var lastError: IOException? = null
+            for (baseUrl in routeCandidates(preferred)) {
+                val base = baseUrl.toHttpUrl()
+                val routedUrl = base.newBuilder()
+                    .encodedPath(original.url.encodedPath)
+                    .encodedQuery(original.url.encodedQuery)
+                    .build()
+                try {
+                    val response = chain.proceed(original.newBuilder().url(routedUrl).build())
+                    rememberActiveRoute(baseUrl)
+                    return@addInterceptor response
+                } catch (error: IOException) {
+                    lastError = error
+                }
+            }
+            throw lastError ?: IOException("No saved JARVIS connection routes")
+        }
         .build()
     private val jsonType = "application/json".toMediaType()
     private lateinit var host: EditText
@@ -68,6 +90,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var messagePolling = false
     private var updatePolling = false
     @Volatile private var updateCheckInProgress = false
+    @Volatile private var reconnectInProgress = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,10 +98,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         tts = TextToSpeech(this, this)
         refreshPermissions()
         val prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
-        host.setText(prefs.getString("host", "http://192.168.1.100:8765"))
+        host.setText(prefs.getString("active_host", prefs.getString("host", "http://192.168.1.100:8765")))
         spokenName.setText(prefs.getString("spoken_name", "${Build.MANUFACTURER} ${Build.MODEL}".trim()))
         val savedDevice = prefs.getString("device_id", null)
-        if (savedDevice != null) refreshSession(host.text.toString().trim().trimEnd('/'), savedDevice)
+        if (savedDevice != null) refreshSession(savedDevice)
         if (!prefs.getBoolean("permissions_onboarded", false)) {
             prefs.edit().putBoolean("permissions_onboarded", true).apply()
             requestAllPermissions()
@@ -310,6 +333,51 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return Base64.encodeToString(signature.sign(), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     }
 
+    private fun normalizedUrl(value: String?): String = value.orEmpty().trim().trimEnd('/')
+
+    private fun rememberRoutes(routes: JSONObject?) {
+        if (routes == null) return
+        val editor = getSharedPreferences("jarvis", MODE_PRIVATE).edit()
+        normalizedUrl(routes.optString("lan")).takeIf { it.startsWith("http") }?.let { editor.putString("lan_host", it) }
+        normalizedUrl(routes.optString("remote")).takeIf { it.startsWith("http") }?.let { editor.putString("remote_host", it) }
+        editor.apply()
+    }
+
+    private fun routeCandidates(preferred: String? = null): List<String> {
+        val prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
+        return listOf(
+            normalizedUrl(preferred),
+            normalizedUrl(prefs.getString("active_host", null)),
+            normalizedUrl(prefs.getString("lan_host", null)),
+            normalizedUrl(prefs.getString("remote_host", null)),
+            normalizedUrl(prefs.getString("host", null))
+        ).filter { it.startsWith("http://") || it.startsWith("https://") }.distinct()
+    }
+
+    private fun rememberActiveRoute(baseUrl: String) {
+        getSharedPreferences("jarvis", MODE_PRIVATE).edit().putString("active_host", baseUrl).apply()
+        runOnUiThread {
+            if (::host.isInitialized) host.setText(baseUrl)
+            if (::status.isInitialized && sessionToken != null) {
+                status.text = "✓ Connected automatically via ${if (baseUrl.startsWith("https://")) "remote" else "local network"}"
+            }
+        }
+    }
+
+    private fun <T> withRoute(preferred: String? = null, action: (String) -> T): T {
+        var lastError: Exception? = null
+        for (baseUrl in routeCandidates(preferred)) {
+            try {
+                val result = action(baseUrl)
+                rememberActiveRoute(baseUrl)
+                return result
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
+        throw lastError ?: IOException("No saved JARVIS connection routes")
+    }
+
     private fun pairDevice() {
         val baseUrl = host.text.toString().trim().trimEnd('/')
         val pairingCode = code.text.toString().trim()
@@ -331,22 +399,25 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     put("device_name", deviceName)
                     put("public_key_pem", publicKeyPem())
                 }
-                val request = Request.Builder().url("$baseUrl/pair")
-                    .post(payload.toString().toRequestBody(jsonType)).build()
-                http.newCall(request).execute().use { response ->
-                    val body = response.body?.string() ?: "{}"
-                    if (!response.isSuccessful) error(JSONObject(body).optString("detail", "Pairing failed"))
-                    val obj = JSONObject(body)
-                    val deviceId = obj.getString("device_id")
-                    val challenge = obj.getString("challenge")
-                    val scopes = obj.optJSONArray("scopes")?.let { arr ->
-                        (0 until arr.length()).map { arr.getString(it) }
-                    } ?: emptyList()
-                    getSharedPreferences("jarvis", MODE_PRIVATE).edit()
-                        .putString("host", baseUrl).putString("device_id", deviceId)
-                        .putString("spoken_name", deviceName)
-                        .putStringSet("scopes", scopes.toSet()).commit()
-                    authenticate(baseUrl, deviceId, challenge)
+                withRoute(baseUrl) { route ->
+                    val request = Request.Builder().url("$route/pair")
+                        .post(payload.toString().toRequestBody(jsonType)).build()
+                    http.newCall(request).execute().use { response ->
+                        val body = response.body?.string() ?: "{}"
+                        if (!response.isSuccessful) error(JSONObject(body).optString("detail", "Pairing failed"))
+                        val obj = JSONObject(body)
+                        val deviceId = obj.getString("device_id")
+                        val challenge = obj.getString("challenge")
+                        val scopes = obj.optJSONArray("scopes")?.let { arr ->
+                            (0 until arr.length()).map { arr.getString(it) }
+                        } ?: emptyList()
+                        rememberRoutes(obj.optJSONObject("routes"))
+                        getSharedPreferences("jarvis", MODE_PRIVATE).edit()
+                            .putString("host", route).putString("device_id", deviceId)
+                            .putString("spoken_name", deviceName)
+                            .putStringSet("scopes", scopes.toSet()).commit()
+                        authenticate(route, deviceId, challenge)
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread { status.text = "Pairing failed: ${e.message ?: "connection error"}" }
@@ -359,13 +430,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             put("device_id", deviceId)
             put("signature_b64", sign(challenge))
         }
-        val request = Request.Builder().url("$baseUrl/auth/verify")
-            .post(payload.toString().toRequestBody(jsonType)).build()
-        http.newCall(request).execute().use { response ->
+        withRoute(baseUrl) { route ->
+          val request = Request.Builder().url("$route/auth/verify")
+              .post(payload.toString().toRequestBody(jsonType)).build()
+          http.newCall(request).execute().use { response ->
             val body = response.body?.string() ?: "{}"
             val obj = JSONObject(body)
             val ok = response.isSuccessful && obj.optBoolean("authenticated", false)
+            if (!ok) error(obj.optString("detail", "Authentication failed"))
             if (ok) sessionToken = obj.optString("session_token").takeIf { it.isNotBlank() }
+            rememberRoutes(obj.optJSONObject("routes"))
             val scopes = obj.optJSONArray("scopes")?.let { arr ->
                 (0 until arr.length()).map { arr.getString(it) }
             } ?: getSharedPreferences("jarvis", MODE_PRIVATE).getStringSet("scopes", emptySet())!!.toList()
@@ -377,22 +451,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (ok) startMessagePolling()
                 if (ok) startAutomaticUpdatePolling()
             }
+          }
         }
     }
 
-    private fun refreshSession(baseUrl: String, deviceId: String) {
+    private fun refreshSession(deviceId: String) {
+        if (reconnectInProgress) return
+        reconnectInProgress = true
         status.text = "Reconnecting to JARVIS..."
         Thread {
             try {
                 ensureKeyPair()
-                val request = Request.Builder().url("$baseUrl/auth/challenge?device_id=$deviceId").post("".toRequestBody(null)).build()
-                http.newCall(request).execute().use { response ->
-                    val body = response.body?.string() ?: "{}"
-                    if (!response.isSuccessful) error(JSONObject(body).optString("detail", "Authentication failed"))
-                    authenticate(baseUrl, deviceId, JSONObject(body).getString("challenge"))
+                withRoute { route ->
+                    val request = Request.Builder().url("$route/auth/challenge?device_id=$deviceId").post("".toRequestBody(null)).build()
+                    http.newCall(request).execute().use { response ->
+                        val body = response.body?.string() ?: "{}"
+                        if (!response.isSuccessful) error(JSONObject(body).optString("detail", "Authentication failed"))
+                        authenticate(route, deviceId, JSONObject(body).getString("challenge"))
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread { status.text = "Reconnect failed: ${e.message ?: "connection error"}" }
+            } finally {
+                reconnectInProgress = false
             }
         }.start()
     }
@@ -594,6 +675,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val baseUrl = host.text.toString().trim().trimEnd('/')
         Thread {
             try {
+                val routesRequest = Request.Builder().url("$baseUrl/connection/routes")
+                    .header("Authorization", "Bearer $token").get().build()
+                http.newCall(routesRequest).execute().use { response ->
+                    if (response.code == 401) {
+                        sessionToken = null
+                        getSharedPreferences("jarvis", MODE_PRIVATE).getString("device_id", null)?.let { refreshSession(it) }
+                        return@Thread
+                    }
+                    if (response.isSuccessful) rememberRoutes(JSONObject(response.body?.string() ?: "{}"))
+                }
                 val request = Request.Builder().url("$baseUrl/messages")
                     .header("Authorization", "Bearer $token").get().build()
                 http.newCall(request).execute().use { response ->

@@ -14,7 +14,7 @@ from .updater import updater
 from .online_assistant import online_assistant, MODEL as AI_MODEL
 from .windows_voice import windows_voice
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.3")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.4")
 store = Store()
 current_pairing_code = ""
 
@@ -77,7 +77,7 @@ def dashboard():
     home_name = store.home_name()
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.5.3</title>
+<title>JARVIS v0.5.4</title>
 <style>
 :root{{color-scheme:dark;--bg:#070b12;--panel:#101826;--panel2:#0b121d;--line:#24334a;--text:#f4f7fb;--muted:#92a4ba;--blue:#3979ef;--blue2:#245cca}}
 *{{box-sizing:border-box}}body{{font-family:Inter,"Segoe UI",system-ui,sans-serif;background:radial-gradient(circle at 12% -10%,#16325f 0,transparent 32%),var(--bg);color:var(--text);max-width:1380px;margin:0 auto;padding:24px}}
@@ -93,7 +93,7 @@ input{{background:var(--panel2);color:var(--text);border:1px solid var(--line);b
 details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--line);border-radius:18px;padding:4px 18px 18px}}details.advanced>summary{{cursor:pointer;padding:16px 2px;font-weight:700;color:#b9c9dc;list-style:none}}details.advanced>summary:before{{content:'›';display:inline-block;margin-right:10px;transition:transform .2s}}details[open]>summary:before{{transform:rotate(90deg)}}
 @media(max-width:850px){{body{{padding:16px}}.dashboard,.settings-grid{{grid-template-columns:1fr}}.hero,.full{{grid-column:auto}}.route-grid{{grid-template-columns:1fr}}.app-header{{align-items:flex-start;flex-direction:column}}}}
 </style></head><body>
-<header class='app-header'><div class='brand'><div class='orb'></div><div><h1>JARVIS</h1><div class='small'>Windows voice assistant · v0.5.3</div></div></div><span class='{online_class} badge'>Remote {escape(tunnel.status)}</span></header>
+<header class='app-header'><div class='brand'><div class='orb'></div><div><h1>JARVIS</h1><div class='small'>Windows voice assistant · v0.5.4</div></div></div><span class='{online_class} badge'>Remote {escape(tunnel.status)}</span></header>
 <main class='dashboard'>
 
 <section class='card hero'><h2>Assistant</h2>
@@ -139,7 +139,7 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 <div class='route-label'>Remote / internet</div><div class='route-value'><code id='remoteUrl' class='url'>{escape(remote_url)}</code></div>
 <div class='route-label'>Admin dashboard</div><div class='route-value'><code class='url'>{escape(admin_url)}</code></div>
 </div>
-<p class='small'>Use the LAN address when the phone is on the same network. Use the HTTPS remote address when testing over cellular or another network. The admin dashboard stays local to this PC.</p>
+<p class='small'>Paired phones remember both routes and switch automatically between local Wi-Fi and the remote connection. The admin dashboard stays local to this PC.</p>
 </div>
 
 <div class='card'><h2>Remote connection</h2><span id='tunnelBadge' class='{online_class} badge'>Tunnel: {escape(tunnel.status)}</span><p id='tunnelError' class='error'>{escape(tunnel.last_error)}</p>

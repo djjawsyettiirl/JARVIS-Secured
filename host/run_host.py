@@ -15,19 +15,26 @@ from jarvis_host.updater import updater
 def _start_tunnel_when_gateway_is_ready() -> None:
     # Give Uvicorn a moment to bind before cloudflared begins probing it.
     time.sleep(1.0)
-    tunnel.start_quick_tunnel()
+    while True:
+        try:
+            tunnel.start_quick_tunnel()
+        except Exception as exc:
+            tunnel.status = "error"
+            tunnel.last_error = str(exc)
+        time.sleep(15)
 
 
 def _automatic_update_loop() -> None:
     while True:
-        time.sleep(300)
         try:
+            updater.stage_android_if_available()
             if updater.auto_install_if_available():
                 time.sleep(1)
                 os._exit(0)
         except Exception as exc:
             updater.status = "error"
             updater.last_error = str(exc)
+        time.sleep(300)
 
 
 def main() -> None:
