@@ -12,8 +12,9 @@ from .assistant import respond, store as assistant_store
 from .google_account import google_account
 from .updater import updater
 from .online_assistant import online_assistant, MODEL as AI_MODEL
+from .windows_voice import windows_voice
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.4.5")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.4.6")
 store = Store()
 current_pairing_code = ""
 
@@ -71,7 +72,7 @@ def dashboard():
     online_class = "online" if tunnel.status == "online" else "warn"
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.4.5</title>
+<title>JARVIS v0.4.6</title>
 <style>
 :root{{color-scheme:dark}}body{{font-family:system-ui;background:#080c12;color:#edf2f7;max-width:1200px;margin:0 auto;padding:32px 20px}}
 .card{{background:#111824;border:1px solid #263346;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 12px 40px #0004}}
@@ -86,7 +87,7 @@ input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#ed
 <h1>JARVIS <span class='small'>v0.4 voice assistant</span></h1><p class='small'>Windows Host Dashboard · local administration only</p>
 
 <div class='card'><h2>Assistant</h2>
-<p class='small'>Speak or type a request. Voice recognition uses your browser microphone; replies can be spoken aloud.</p>
+<p class='small'>Speak or type a request. Voice recognition and spoken replies use the native Windows speech engine.</p>
 <input id='assistantInput' class='assistant' placeholder="Ask about Gmail, Calendar, or Maps" autocomplete='off'>
 <button id='askButton' type='button' onclick='askJarvis()'>Ask JARVIS</button>
 <button id='voiceButton' class='secondary' type='button' onclick='startVoice()'>🎙 Speak</button>
@@ -147,8 +148,8 @@ input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#ed
 <script>
 const input = document.getElementById('assistantInput');
 input.addEventListener('keydown', event => {{ if (event.key === 'Enter') askJarvis(); }});
-function speak(text) {{
-  if ('speechSynthesis' in window) {{ speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(text)); }}
+async function speak(text) {{
+  try {{ await fetch('/voice/speak', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{message:text}})}}); }} catch (_) {{}}
 }}
 async function askJarvis() {{
   const message = input.value.trim(); if (!message) return;
@@ -162,16 +163,15 @@ async function askJarvis() {{
     if (data.action && data.action.type === 'open_url') window.open(data.action.url, '_blank', 'noopener');
   }} catch (error) {{ reply.textContent = 'JARVIS error: ' + error.message; }}
 }}
-function startVoice() {{
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition) {{ document.getElementById('assistantReply').textContent = 'Voice recognition is not supported by this browser. Try Microsoft Edge or Chrome.'; return; }}
-  const recognition = new Recognition(); const button = document.getElementById('voiceButton');
-  recognition.lang = navigator.language || 'en-US'; recognition.interimResults = false;
-  recognition.onstart = () => {{ button.classList.add('listening'); button.textContent = 'Listening…'; }};
-  recognition.onend = () => {{ button.classList.remove('listening'); button.textContent = '🎙 Speak'; }};
-  recognition.onerror = event => {{ document.getElementById('assistantReply').textContent = 'Microphone error: ' + event.error; }};
-  recognition.onresult = event => {{ input.value = event.results[0][0].transcript; askJarvis(); }};
-  recognition.start();
+async function startVoice() {{
+  const button = document.getElementById('voiceButton'); const reply = document.getElementById('assistantReply');
+  button.classList.add('listening'); button.textContent = 'Listening…'; button.disabled = true; reply.textContent = 'Listening…';
+  try {{
+    const response = await fetch('/voice/listen', {{method:'POST'}}); const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Voice recognition failed');
+    input.value = data.transcript; await askJarvis();
+  }} catch (error) {{ reply.textContent = 'Microphone error: ' + error.message; }}
+  finally {{ button.classList.remove('listening'); button.textContent = '🎙 Speak'; button.disabled = false; }}
 }}
 async function googleStatus() {{
   try {{
@@ -297,6 +297,27 @@ def remove_ai_key():
 def assistant(request: AssistantRequest):
     try:
         return respond(request.message)
+    except Exception as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@admin_app.post("/voice/listen")
+def voice_listen():
+    try:
+        return {"transcript": windows_voice.listen()}
+    except Exception as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@admin_app.post("/voice/speak")
+def voice_speak(request: AssistantRequest):
+    try:
+        windows_voice.speak(request.message)
+        return {"spoken": True}
     except Exception as exc:
         from fastapi import HTTPException
 

@@ -9,4 +9,5 @@ google-api-python-client>=2.160,<3
 google-auth-oauthlib>=1.2,<2
 keyring>=25.6,<26
 pywebview>=5.4,<7
+pythonnet>=3.0.5,<4
 openai>=1.109,<3
