@@ -6,6 +6,7 @@ from datetime import datetime
 from urllib.parse import quote_plus
 
 from .google_account import google_account
+from .online_assistant import online_assistant
 from .store import Store
 
 store = Store()
@@ -21,6 +22,19 @@ def respond(message: str, allowed_scopes: set[str] | None = None) -> dict[str, o
     lowered = text.lower()
     if not text:
         return {"reply": "I didn't hear a request.", "action": None}
+    message_prefixes = (
+        "tell home ", "tell the home client ", "tell my partner ",
+        "message home ", "message the windows client ", "send home ",
+    )
+    for prefix in message_prefixes:
+        if lowered.startswith(prefix):
+            _require(allowed_scopes, "messaging")
+            body = text[len(prefix):].strip()
+            if body:
+                return {
+                    "reply": "I’ll send that to the Windows home client.",
+                    "action": {"type": "send_message", "message": body},
+                }
     location_phrases = ("where i'm at", "where i am", "my location", "where im at")
     if ("partner" in lowered or "home" in lowered) and any(phrase in lowered for phrase in location_phrases):
         _require(allowed_scopes, "messaging")
@@ -68,7 +82,4 @@ def respond(message: str, allowed_scopes: set[str] | None = None) -> dict[str, o
             if destination:
                 url = f"https://www.google.com/maps/search/?api=1&query={quote_plus(destination)}"
                 return {"reply": f"Opening Google Maps for {destination}.", "action": {"type": "open_url", "url": url}}
-    return {
-        "reply": "I can read your calendar, summarize unread Gmail, open Google Maps, or set an alarm. Try saying: set an alarm for 10 minutes.",
-        "action": None,
-    }
+    return online_assistant.ask(text)

@@ -16,3 +16,9 @@ def test_maps_uses_google_maps_url():
 
     assert response["action"]["type"] == "open_url"
     assert "google.com/maps" in response["action"]["url"]
+
+
+def test_general_home_message_becomes_device_action():
+    response = assistant.respond("tell the home client I'm running late", {"messaging"})
+
+    assert response["action"] == {"type": "send_message", "message": "I'm running late"}

@@ -330,6 +330,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         if (action?.optString("type") == "share_location") {
                             shareCurrentLocation(baseUrl, token, action.optString("message", "I'm here"))
                         }
+                        if (action?.optString("type") == "send_message") {
+                            sendMessageToHome(baseUrl, token, action.optString("message"))
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -383,6 +386,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 runOnUiThread { assistantReply.text = "Your location was sent to the home client." }
             } catch (e: Exception) {
                 runOnUiThread { assistantReply.text = "Location message failed: ${e.message ?: "connection error"}" }
+            }
+        }.start()
+    }
+
+    private fun sendMessageToHome(baseUrl: String, token: String, message: String) {
+        if (message.isBlank()) return
+        Thread {
+            try {
+                val payload = JSONObject().put("body", message)
+                val request = Request.Builder().url("$baseUrl/messages")
+                    .header("Authorization", "Bearer $token")
+                    .post(payload.toString().toRequestBody(jsonType)).build()
+                http.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: "{}"
+                    if (!response.isSuccessful) error(JSONObject(body).optString("detail", "Message failed"))
+                }
+                runOnUiThread {
+                    val confirmation = "Message sent to the Windows home client."
+                    assistantReply.text = confirmation
+                    tts?.speak(confirmation, TextToSpeech.QUEUE_FLUSH, null, "jarvis-message-sent")
+                }
+            } catch (e: Exception) {
+                runOnUiThread { assistantReply.text = "Message failed: ${e.message ?: "connection error"}" }
             }
         }.start()
     }

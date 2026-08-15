@@ -11,14 +11,19 @@ from . import tunnel
 from .assistant import respond, store as assistant_store
 from .google_account import google_account
 from .updater import updater
+from .online_assistant import online_assistant, MODEL as AI_MODEL
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.4.1")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.4.2")
 store = Store()
 current_pairing_code = ""
 
 
 class AssistantRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
+
+
+class ApiKeyRequest(BaseModel):
+    api_key: str = Field(min_length=20, max_length=300)
 
 
 def _checked(scopes: list[str], name: str) -> str:
@@ -66,7 +71,7 @@ def dashboard():
     online_class = "online" if tunnel.status == "online" else "warn"
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.4.1</title>
+<title>JARVIS v0.4.2</title>
 <style>
 :root{{color-scheme:dark}}body{{font-family:system-ui;background:#080c12;color:#edf2f7;max-width:1200px;margin:0 auto;padding:32px 20px}}
 .card{{background:#111824;border:1px solid #263346;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 12px 40px #0004}}
@@ -86,6 +91,14 @@ input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#ed
 <button id='askButton' type='button' onclick='askJarvis()'>Ask JARVIS</button>
 <button id='voiceButton' class='secondary' type='button' onclick='startVoice()'>🎙 Speak</button>
 <p id='assistantReply'>Ready.</p></div>
+
+<div class='card'><h2>Internet intelligence</h2>
+<span id='aiBadge' class='warn badge'>Checking…</span>
+<p class='small'>Enables live internet search, current answers, and recommendations inside JARVIS. The key is stored in Windows Credential Manager and is never sent to paired devices.</p>
+<input id='openaiKey' class='assistant' type='password' placeholder='OpenAI API key' autocomplete='new-password'>
+<button type='button' onclick='saveAiKey()'>Enable internet intelligence</button>
+<button class='danger' type='button' onclick='removeAiKey()'>Remove key</button>
+<p id='aiDetail' class='small'></p></div>
 
 <div class='card'><h2>Google account</h2>
 <span id='googleBadge' class='warn badge'>Checking…</span>
@@ -143,7 +156,9 @@ async function askJarvis() {{
   try {{
     const response = await fetch('/assistant', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{message}})}});
     const data = await response.json(); if (!response.ok) throw new Error(data.detail || 'Request failed');
-    reply.textContent = data.reply; speak(data.reply);
+    reply.textContent = data.reply;
+    for (const source of (data.sources || [])) {{ const line = document.createElement('div'); const link = document.createElement('a'); link.href = source.url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = source.title || source.url; line.appendChild(link); reply.appendChild(line); }}
+    speak(data.reply);
     if (data.action && data.action.type === 'open_url') window.open(data.action.url, '_blank', 'noopener');
   }} catch (error) {{ reply.textContent = 'JARVIS error: ' + error.message; }}
 }}
@@ -168,6 +183,11 @@ async function googleStatus() {{
 }}
 async function connectGoogle() {{ await fetch('/google/connect', {{method:'POST'}}); googleStatus(); }}
 async function disconnectGoogle() {{ await fetch('/google/disconnect', {{method:'POST'}}); googleStatus(); }}
+async function aiStatus() {{
+  try {{ const data = await (await fetch('/ai/status')).json(); const badge = document.getElementById('aiBadge'); badge.textContent = data.configured ? 'Online search ready' : 'Setup required'; badge.className = (data.configured ? 'online' : 'warn') + ' badge'; document.getElementById('aiDetail').textContent = data.configured ? 'Model: ' + data.model : 'Add an API key to enable live search and recommendations.'; }} catch (_) {{}}
+}}
+async function saveAiKey() {{ const input = document.getElementById('openaiKey'); const response = await fetch('/ai/key', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{api_key:input.value}})}}); const data = await response.json(); if (!response.ok) alert(data.detail || 'Could not save key'); else input.value=''; aiStatus(); }}
+async function removeAiKey() {{ await fetch('/ai/key', {{method:'DELETE'}}); aiStatus(); }}
 async function tunnelStatus() {{
   try {{
     const data = await (await fetch('/tunnel/status')).json();
@@ -212,7 +232,7 @@ async function applyWindowsUpdate() {{
   const response = await fetch('/updates/apply-windows', {{method:'POST'}});
   if (!response.ok) {{ const data = await response.json(); alert(data.detail || 'Update failed'); }}
 }}
-googleStatus(); tunnelStatus(); homeInbox(); updateStatus(); setInterval(googleStatus, 3000); setInterval(tunnelStatus, 2000); setInterval(homeInbox, 2000); setInterval(updateStatus, 2000); setInterval(checkAlarms, 1000);
+googleStatus(); aiStatus(); tunnelStatus(); homeInbox(); updateStatus(); setInterval(googleStatus, 3000); setInterval(aiStatus, 5000); setInterval(tunnelStatus, 2000); setInterval(homeInbox, 2000); setInterval(updateStatus, 2000); setInterval(checkAlarms, 1000);
 </script>
 </body></html>"""
 
@@ -249,6 +269,28 @@ def google_connect():
 def google_disconnect():
     google_account.disconnect()
     return {"disconnected": True}
+
+
+@admin_app.get("/ai/status")
+def ai_status():
+    return {"configured": online_assistant.configured(), "model": AI_MODEL}
+
+
+@admin_app.post("/ai/key")
+def save_ai_key(request: ApiKeyRequest):
+    try:
+        online_assistant.save_key(request.api_key)
+        return {"configured": True}
+    except Exception as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@admin_app.delete("/ai/key")
+def remove_ai_key():
+    online_assistant.remove_key()
+    return {"configured": False}
 
 
 @admin_app.post("/assistant")
