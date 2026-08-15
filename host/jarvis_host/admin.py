@@ -14,7 +14,7 @@ from .updater import updater
 from .online_assistant import online_assistant, MODEL as AI_MODEL
 from .windows_voice import windows_voice
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.4.8")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.4.9")
 store = Store()
 current_pairing_code = ""
 
@@ -72,7 +72,7 @@ def dashboard():
     online_class = "online" if tunnel.status == "online" else "warn"
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.4.8</title>
+<title>JARVIS v0.4.9</title>
 <style>
 :root{{color-scheme:dark}}body{{font-family:system-ui;background:#080c12;color:#edf2f7;max-width:1200px;margin:0 auto;padding:32px 20px}}
 .card{{background:#111824;border:1px solid #263346;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 12px 40px #0004}}
@@ -119,7 +119,7 @@ input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#ed
 <button type='button' onclick='checkUpdates()'>Check private builds</button>
 <button type='button' onclick='downloadUpdates()'>Download updates</button>
 <button class='danger' type='button' onclick='applyWindowsUpdate()'>Install Windows update</button>
-<p class='small'>Updates come from private GitHub Actions artifacts using this PC's authenticated GitHub login. Windows performs a brief controlled restart. Android receives its APK through the paired host and shows the protected installer confirmation.</p></div>
+<p class='small'>JARVIS checks private Windows builds every five minutes and automatically closes, updates, and reopens when a newer build is ready. Android receives its APK through the paired host and shows the protected installer confirmation.</p></div>
 
 <div class='card'><h2>Connection routes</h2>
 <div class='route-grid'>

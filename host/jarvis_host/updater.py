@@ -92,6 +92,23 @@ class Updater:
         threading.Thread(target=self._download, daemon=True).start()
         return True
 
+    def auto_install_if_available(self) -> bool:
+        if not getattr(sys, "frozen", False):
+            return False
+        latest = self._latest("windows-build.yml")
+        current_commit = self.current_build()["commit"]
+        if not latest or not current_commit or str(latest.get("headSha", "")) == current_commit:
+            return False
+        with self._lock:
+            if self.status == "downloading":
+                return False
+            self.status = "downloading"
+            self.last_error = ""
+        self._download()
+        if self.status != "ready":
+            return False
+        return self.stage_windows_restart()
+
     def _download(self) -> None:
         try:
             self.windows_run = self._latest("windows-build.yml")

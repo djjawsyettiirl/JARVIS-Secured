@@ -9,12 +9,25 @@ from jarvis_host.app import app, store
 from jarvis_host.admin import admin_app
 import jarvis_host.admin as admin
 from jarvis_host import tunnel
+from jarvis_host.updater import updater
 
 
 def _start_tunnel_when_gateway_is_ready() -> None:
     # Give Uvicorn a moment to bind before cloudflared begins probing it.
     time.sleep(1.0)
     tunnel.start_quick_tunnel()
+
+
+def _automatic_update_loop() -> None:
+    while True:
+        time.sleep(300)
+        try:
+            if updater.auto_install_if_available():
+                time.sleep(1)
+                os._exit(0)
+        except Exception as exc:
+            updater.status = "error"
+            updater.last_error = str(exc)
 
 
 def main() -> None:
@@ -33,6 +46,7 @@ def main() -> None:
     )
     threading.Thread(target=admin_server.run, daemon=True).start()
     threading.Thread(target=_start_tunnel_when_gateway_is_ready, daemon=True).start()
+    threading.Thread(target=_automatic_update_loop, daemon=True).start()
 
     gateway_server = uvicorn.Server(
         uvicorn.Config(app, host="0.0.0.0", port=8765, log_config=None, access_log=False)
