@@ -36,7 +36,6 @@ def _reader(proc: subprocess.Popen[str]) -> None:
     try:
         assert proc.stdout is not None
         for line in proc.stdout:
-            print("[cloudflared]", line.rstrip())
             match = PUBLIC_URL_RE.search(line)
             if match:
                 public_url = match.group(0)

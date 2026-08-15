@@ -9,6 +9,9 @@ py -m pip install -r host/requirements.txt
 py host/run_host.py
 ```
 
+The packaged build opens a native JARVIS desktop window. It does not show a
+console or launch the dashboard in an external browser.
+
 The host prints an 8-digit one-time pairing code. It expires after five minutes and is invalid after one successful pairing.
 
 Paired devices are retained in `%LOCALAPPDATA%\JARVIS\jarvis.db`. Existing

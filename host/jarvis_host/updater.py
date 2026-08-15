@@ -122,9 +122,9 @@ class Updater:
         extracted.mkdir(parents=True)
         with zipfile.ZipFile(outer) as archive:
             archive.extractall(extracted)
-        replacement = next(extracted.rglob("JARVIS-Host.exe"), None)
+        replacement = next(extracted.rglob("JARVIS.exe"), None)
         if not replacement:
-            raise FileNotFoundError("The downloaded Windows artifact did not contain JARVIS-Host.exe")
+            raise FileNotFoundError("The downloaded Windows artifact did not contain JARVIS.exe")
         script = self.update_dir / "apply-update.cmd"
         script.write_text(
             "@echo off\r\n"
