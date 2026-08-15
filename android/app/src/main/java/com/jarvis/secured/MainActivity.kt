@@ -4,6 +4,10 @@ import android.Manifest
 import android.content.Intent
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -17,6 +21,8 @@ import android.util.Base64
 import android.text.util.Linkify
 import android.text.method.LinkMovementMethod
 import android.view.View
+import android.view.Gravity
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -85,70 +91,130 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun buildUi() {
+        fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+        val textPrimary = Color.parseColor("#F4F7FB")
+        val textMuted = Color.parseColor("#91A4BA")
+        val accent = Color.parseColor("#3979EF")
+        fun styleInput(input: EditText) = input.apply {
+            setTextColor(textPrimary)
+            setHintTextColor(Color.parseColor("#647892"))
+            backgroundTintList = ColorStateList.valueOf(Color.parseColor("#49617E"))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        fun styleButton(button: Button, secondary: Boolean = false) = button.apply {
+            isAllCaps = false
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            backgroundTintList = ColorStateList.valueOf(if (secondary) Color.parseColor("#26364D") else accent)
+            minHeight = dp(48)
+        }
+        fun actionRow(vararg buttons: Button) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            buttons.forEachIndexed { index, button ->
+                addView(button, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (index > 0) marginStart = dp(8)
+                })
+            }
+        }
+        fun card(titleText: String, helpText: String? = null, vararg content: View) = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#101826"))
+                setStroke(dp(1), Color.parseColor("#24334A"))
+                cornerRadius = dp(20).toFloat()
+            }
+            addView(TextView(this@MainActivity).apply {
+                text = titleText
+                textSize = 20f
+                setTextColor(textPrimary)
+                setTypeface(typeface, Typeface.BOLD)
+            })
+            if (helpText != null) addView(TextView(this@MainActivity).apply {
+                text = helpText
+                textSize = 14f
+                setTextColor(textMuted)
+                setPadding(0, dp(5), 0, dp(10))
+            })
+            content.forEach { view ->
+                addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = dp(8)
+                })
+            }
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 40, 32, 32)
+            setPadding(dp(16), dp(22), dp(16), dp(28))
+            setBackgroundColor(Color.parseColor("#070B12"))
         }
-        val title = TextView(this).apply { text = "JARVIS"; textSize = 32f }
+        val title = TextView(this).apply {
+            text = "JARVIS"
+            textSize = 30f
+            setTextColor(textPrimary)
+            setTypeface(typeface, Typeface.BOLD)
+            letterSpacing = 0.06f
+        }
         val subtitle = TextView(this).apply {
-            text = "Secure personal AI companion"
-            textSize = 16f
+            text = "Your secure home companion"
+            textSize = 15f
+            setTextColor(textMuted)
+            setPadding(0, dp(2), 0, dp(14))
         }
-        permissionStatus = TextView(this).apply { textSize = 15f; setPadding(0, 18, 0, 8) }
-        val request = Button(this).apply {
-            text = "REQUEST / REVIEW PERMISSIONS"
+        permissionStatus = TextView(this).apply { textSize = 14f; setTextColor(textMuted) }
+        val request = styleButton(Button(this).apply {
+            text = "Review permissions"
             setOnClickListener { requestAllPermissions() }
-        }
-        val settings = Button(this).apply {
-            text = "OPEN ANDROID APP SETTINGS"
+        })
+        val settings = styleButton(Button(this).apply {
+            text = "Android settings"
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
             }
-        }
-        val pairTitle = TextView(this).apply { text = "Windows Host"; textSize = 22f; setPadding(0, 24, 0, 8) }
-        host = EditText(this).apply {
+        }, true)
+        host = styleInput(EditText(this).apply {
             hint = "Host URL"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
-        }
-        code = EditText(this).apply {
+        })
+        code = styleInput(EditText(this).apply {
             hint = "8-digit one-time pairing code"
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
             maxLines = 1
-        }
-        val pair = Button(this).apply {
-            text = "PAIR WITH JARVIS"
+        })
+        val pair = styleButton(Button(this).apply {
+            text = "Pair with JARVIS"
             setOnClickListener { pairDevice() }
-        }
-        status = TextView(this).apply { text = "Not paired"; textSize = 17f; setPadding(0, 12, 0, 8) }
-        spokenName = EditText(this).apply { hint = "Name spoken by Windows"; maxLines = 1 }
-        val saveSpokenName = Button(this).apply {
-            text = "SAVE SPOKEN DEVICE NAME"
+        })
+        status = TextView(this).apply { text = "Not paired"; textSize = 16f; setTextColor(Color.parseColor("#8FC2FF")) }
+        spokenName = styleInput(EditText(this).apply { hint = "Name spoken by Windows"; maxLines = 1 })
+        val saveSpokenName = styleButton(Button(this).apply {
+            text = "Save spoken name"
             setOnClickListener { saveSpokenDeviceName() }
+        })
+        scopesStatus = TextView(this).apply { textSize = 13f; setTextColor(textMuted) }
+        assistantInput = styleInput(EditText(this).apply { hint = "Ask JARVIS anything"; maxLines = 3 })
+        val ask = styleButton(Button(this).apply { text = "Ask JARVIS"; setOnClickListener { askJarvis() } })
+        val speak = styleButton(Button(this).apply { text = "🎙 Speak"; setOnClickListener { startVoiceInput() } }, true)
+        val update = styleButton(Button(this).apply { text = "Check private update"; setOnClickListener { installPrivateUpdate(false) } })
+        assistantReply = TextView(this).apply {
+            text = "Pair with the Windows host to begin."
+            textSize = 16f
+            setTextColor(textPrimary)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply { setColor(Color.parseColor("#0A111B")); cornerRadius = dp(12).toFloat() }
         }
-        scopesStatus = TextView(this).apply { textSize = 15f }
-        val assistantTitle = TextView(this).apply { text = "Assistant"; textSize = 22f; setPadding(0, 28, 0, 8) }
-        assistantInput = EditText(this).apply { hint = "Ask JARVIS"; maxLines = 3 }
-        val ask = Button(this).apply { text = "ASK JARVIS"; setOnClickListener { askJarvis() } }
-        val speak = Button(this).apply { text = "SPEAK TO JARVIS"; setOnClickListener { startVoiceInput() } }
-        val update = Button(this).apply { text = "CHECK PRIVATE UPDATE"; setOnClickListener { installPrivateUpdate(false) } }
-        assistantReply = TextView(this).apply { text = "Pair with the Windows host to begin."; textSize = 17f; setPadding(0, 12, 0, 20) }
-        val inboxTitle = TextView(this).apply { text = "Home inbox"; textSize = 22f; setPadding(0, 28, 0, 8) }
-        val inboxHelp = TextView(this).apply {
-            text = "Messages and explicitly shared locations from Windows appear here."
-            textSize = 15f
-            setPadding(0, 0, 0, 8)
-        }
-        inboxInput = EditText(this).apply {
+        inboxInput = styleInput(EditText(this).apply {
             hint = "Send a message to the Windows client"
             maxLines = 3
-        }
-        val sendInbox = Button(this).apply {
-            text = "SEND TO WINDOWS"
+        })
+        val sendInbox = styleButton(Button(this).apply {
+            text = "Send to Windows"
             setOnClickListener { sendInboxMessage() }
-        }
+        })
         inboxMessages = TextView(this).apply {
-            textSize = 17f
-            setPadding(0, 12, 0, 24)
+            textSize = 16f
+            setTextColor(textPrimary)
+            setPadding(dp(4), dp(8), dp(4), dp(4))
             autoLinkMask = Linkify.WEB_URLS
             movementMethod = LinkMovementMethod.getInstance()
         }
@@ -156,29 +222,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         root.addView(title)
         root.addView(subtitle)
-        root.addView(permissionStatus)
-        root.addView(request)
-        root.addView(settings)
-        root.addView(pairTitle)
-        root.addView(host)
-        root.addView(code)
-        root.addView(pair)
-        root.addView(status)
-        root.addView(spokenName)
-        root.addView(saveSpokenName)
-        root.addView(scopesStatus)
-        root.addView(assistantTitle)
-        root.addView(assistantInput)
-        root.addView(ask)
-        root.addView(speak)
-        root.addView(update)
-        root.addView(assistantReply)
-        root.addView(inboxTitle)
-        root.addView(inboxHelp)
-        root.addView(inboxInput)
-        root.addView(sendInbox)
-        root.addView(inboxMessages)
-        val scroll = ScrollView(this).apply { addView(root) }
+        listOf(
+            card("Assistant", "Type a request or speak naturally.", assistantInput, actionRow(ask, speak), assistantReply),
+            card("Home inbox", "Messages and shared locations from Windows.", inboxInput, sendInbox, inboxMessages),
+            card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
+            card("App settings", "Permissions and private releases.", permissionStatus, actionRow(request, settings), update)
+        ).forEach { section ->
+            root.addView(section, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(14)
+            })
+        }
+        val scroll = ScrollView(this).apply { isFillViewport = true; addView(root) }
         setContentView(scroll)
     }
 

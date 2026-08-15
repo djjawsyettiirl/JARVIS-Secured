@@ -14,7 +14,7 @@ from .updater import updater
 from .online_assistant import online_assistant, MODEL as AI_MODEL
 from .windows_voice import windows_voice
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.2")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.3")
 store = Store()
 current_pairing_code = ""
 
@@ -77,26 +77,31 @@ def dashboard():
     home_name = store.home_name()
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.5.2</title>
+<title>JARVIS v0.5.3</title>
 <style>
-:root{{color-scheme:dark}}body{{font-family:system-ui;background:#080c12;color:#edf2f7;max-width:1200px;margin:0 auto;padding:32px 20px}}
-.card{{background:#111824;border:1px solid #263346;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 12px 40px #0004}}
-.code{{font-size:44px;letter-spacing:9px;font-weight:800}}.small{{color:#93a1b1}}code.url{{font-size:18px;word-break:break-all}}
-.badge{{display:inline-block;padding:6px 10px;border-radius:999px;background:#173b2a;color:#8ff0b0}}.warn{{background:#4a3814;color:#ffd77a}}.online{{background:#173b2a;color:#8ff0b0}}.error{{color:#ff9ca8}}
-.route-grid{{display:grid;grid-template-columns:180px 1fr;gap:12px 18px;align-items:center}}.route-label{{color:#93a1b1}}.route-value{{background:#0b111a;border:1px solid #263346;border-radius:10px;padding:10px 12px;word-break:break-all}}
-table{{width:100%;border-collapse:collapse}}td,th{{text-align:left;padding:14px;border-bottom:1px solid #263346;vertical-align:top}}
-.scopes{{display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:8px}}button{{border:0;border-radius:9px;padding:10px 14px;background:#2d6cdf;color:white;cursor:pointer;margin:8px 6px 0 0}}.danger{{background:#8f3340}}.secondary{{background:#374151}}
-input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#edf2f7;border:1px solid #263346;border-radius:10px;padding:12px 14px;font-size:16px}}#assistantReply{{white-space:pre-wrap;line-height:1.5}}.listening{{background:#a12c48}}
-@media(max-width:700px){{.route-grid{{grid-template-columns:1fr}}}}
+:root{{color-scheme:dark;--bg:#070b12;--panel:#101826;--panel2:#0b121d;--line:#24334a;--text:#f4f7fb;--muted:#92a4ba;--blue:#3979ef;--blue2:#245cca}}
+*{{box-sizing:border-box}}body{{font-family:Inter,"Segoe UI",system-ui,sans-serif;background:radial-gradient(circle at 12% -10%,#16325f 0,transparent 32%),var(--bg);color:var(--text);max-width:1380px;margin:0 auto;padding:24px}}
+.app-header{{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:10px 4px 20px}}.brand{{display:flex;align-items:center;gap:14px}}.orb{{width:42px;height:42px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#8fc2ff,#3979ef 42%,#132a54 70%);box-shadow:0 0 28px #3979ef88}}h1{{font-size:27px;margin:0;letter-spacing:.03em}}h2{{font-size:19px;margin:0 0 8px}}p{{line-height:1.55}}
+.dashboard{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}}.card{{background:linear-gradient(145deg,#121c2b,#0e1622);border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:0 16px 48px #0005;margin:0;min-width:0}}.hero{{grid-column:1/-1}}.settings-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}}.full{{grid-column:1/-1}}
+.small{{color:var(--muted);font-size:14px}}code.url{{font-size:15px;word-break:break-all}}.code{{font-size:38px;letter-spacing:8px;font-weight:800;color:#9ec5ff;margin:12px 0}}
+.badge{{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#173b2a;color:#8ff0b0;font-size:13px;font-weight:650}}.warn{{background:#493814;color:#ffd77a}}.online{{background:#153d2b;color:#91f2b2}}.error{{color:#ff9ca8}}
+.route-grid{{display:grid;grid-template-columns:150px 1fr;gap:10px 14px;align-items:center}}.route-label{{color:var(--muted)}}.route-value{{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:10px 12px;word-break:break-all}}
+table{{width:100%;border-collapse:collapse;font-size:14px}}td,th{{text-align:left;padding:12px;border-bottom:1px solid var(--line);vertical-align:top}}th{{color:var(--muted);font-weight:600}}.scopes{{display:grid;grid-template-columns:repeat(3,minmax(110px,1fr));gap:7px}}
+button{{border:1px solid transparent;border-radius:10px;padding:10px 15px;background:linear-gradient(180deg,var(--blue),var(--blue2));color:white;cursor:pointer;margin:8px 6px 0 0;font-weight:650}}button:hover{{filter:brightness(1.1)}}button:disabled{{opacity:.55}}.danger{{background:#7e2d3b}}.secondary{{background:#26364d;border-color:#344863}}
+input{{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:11px;padding:11px 13px;font-size:15px}}input:focus{{outline:2px solid #3979ef77;border-color:#4d8cff}}input.assistant{{width:min(760px,100%)}}.compose{{display:flex;gap:8px;align-items:center}}.compose input{{flex:1}}
+#assistantReply{{white-space:pre-wrap;line-height:1.55;background:#0a111b;border-radius:12px;padding:14px;min-height:52px}}#homeInbox{{max-height:270px;overflow:auto;margin-top:12px;padding-right:6px}}#homeInbox p{{background:#0a111b;border-radius:12px;padding:10px 12px;margin:7px 0}}.listening{{background:#a12c48}}
+details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--line);border-radius:18px;padding:4px 18px 18px}}details.advanced>summary{{cursor:pointer;padding:16px 2px;font-weight:700;color:#b9c9dc;list-style:none}}details.advanced>summary:before{{content:'›';display:inline-block;margin-right:10px;transition:transform .2s}}details[open]>summary:before{{transform:rotate(90deg)}}
+@media(max-width:850px){{body{{padding:16px}}.dashboard,.settings-grid{{grid-template-columns:1fr}}.hero,.full{{grid-column:auto}}.route-grid{{grid-template-columns:1fr}}.app-header{{align-items:flex-start;flex-direction:column}}}}
 </style></head><body>
-<h1>JARVIS <span class='small'>v0.5.2 voice assistant</span></h1><p class='small'>Windows Host Dashboard · local administration only</p>
+<header class='app-header'><div class='brand'><div class='orb'></div><div><h1>JARVIS</h1><div class='small'>Windows voice assistant · v0.5.3</div></div></div><span class='{online_class} badge'>Remote {escape(tunnel.status)}</span></header>
+<main class='dashboard'>
 
-<div class='card'><h2>Assistant</h2>
+<section class='card hero'><h2>Assistant</h2>
 <p class='small'>Speak or type a request. Voice recognition and spoken replies use the native Windows speech engine.</p>
 <input id='assistantInput' class='assistant' placeholder="Ask about Gmail, Calendar, or Maps" autocomplete='off'>
 <button id='askButton' type='button' onclick='askJarvis()'>Ask JARVIS</button>
 <button id='voiceButton' class='secondary' type='button' onclick='startVoice()'>🎙 Speak</button>
-<p id='assistantReply'>Ready.</p></div>
+<p id='assistantReply'>Ready.</p></section>
 
 <div class='card'><h2>Internet intelligence</h2>
 <span id='aiBadge' class='warn badge'>Checking…</span>
@@ -113,13 +118,13 @@ input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#ed
 <button class='danger' type='button' onclick='disconnectGoogle()'>Disconnect</button>
 <p class='small'>JARVIS requests Gmail read-only and Calendar event access. OAuth tokens are kept in Windows Credential Manager. Maps opens directions in your browser.</p></div>
 
-<div class='card'><h2>Home inbox</h2>
+<section class='card hero'><h2>Home inbox</h2>
 <p class='small'>Messages and explicitly shared locations from paired devices appear here.</p>
 <form method='post' action='/home/name'><input class='assistant' name='name' value='{escape(home_name)}' maxlength='50' required><button>Save Windows spoken name</button></form>
-<input id='homeMessage' class='assistant' placeholder='Send a message to paired devices'>
-<button type='button' onclick='sendHomeMessage()'>Send</button>
-<div id='homeInbox'>No messages yet.</div></div>
+<div class='compose'><input id='homeMessage' placeholder='Send a message to paired devices'><button type='button' onclick='sendHomeMessage()'>Send</button></div>
+<div id='homeInbox'>No messages yet.</div></section>
 
+<details class='advanced'><summary>Connections, updates, accounts, and device settings</summary><div class='settings-grid'>
 <div class='card'><h2>Private updates</h2>
 <span id='updateBadge' class='warn badge'>Idle</span><p id='updateDetail' class='small'></p>
 <button type='button' onclick='checkUpdates()'>Check private builds</button>
@@ -127,7 +132,7 @@ input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#ed
 <button class='danger' type='button' onclick='applyWindowsUpdate()'>Install Windows update</button>
 <p class='small'>JARVIS checks private Windows builds every five minutes and automatically closes, updates, and reopens when a newer build is ready. Android receives its APK through the paired host and shows the protected installer confirmation.</p></div>
 
-<div class='card'><h2>Connection routes</h2>
+<div class='card full'><h2>Connection routes</h2>
 <div class='route-grid'>
 <div class='route-label'>Local gateway</div><div class='route-value'><code class='url'>{escape(local_gateway)}</code></div>
 <div class='route-label'>LAN / same Wi-Fi</div><div class='route-value'><code class='url'>{escape(lan_gateway)}</code></div>
@@ -149,8 +154,9 @@ input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#ed
 
 <p class='small'>Refresh status re-checks the current LAN address and tunnel status without restarting JARVIS. The temporary trycloudflare.com URL is HTTPS and changes whenever the tunnel restarts. It is for testing only.</p></div>
 <div class='card'><h2>Pair a device</h2><p class='small'>This code can be used exactly once and expires after five minutes.</p><div class='code'>{escape(current_pairing_code or '—')}</div><form method='post' action='/pairing/new'><button>Generate new pairing code</button></form></div>
-<div class='card'><h2>Devices & permissions</h2><table><tr><th>Device</th><th>Status</th><th>JARVIS capabilities</th><th>Security</th></tr>{''.join(rows) or '<tr><td colspan=4>No devices paired yet.</td></tr>'}</table></div>
+<div class='card full'><h2>Devices & permissions</h2><table><tr><th>Device</th><th>Status</th><th>JARVIS capabilities</th><th>Security</th></tr>{''.join(rows) or '<tr><td colspan=4>No devices paired yet.</td></tr>'}</table></div>
 <div class='card'><h2>Security</h2><span class='badge'>ECDSA P-256 device authentication enabled</span><p class='small'>Only port 8765 is proxied through the remote tunnel. This admin dashboard remains bound to 127.0.0.1:8766 and is never published.</p></div>
+</div></details></main>
 <script>
 const input = document.getElementById('assistantInput');
 input.addEventListener('keydown', event => {{ if (event.key === 'Enter') askJarvis(); }});
