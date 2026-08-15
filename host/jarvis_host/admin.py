@@ -14,7 +14,7 @@ from .updater import updater
 from .online_assistant import online_assistant, MODEL as AI_MODEL
 from .windows_voice import windows_voice
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.1")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.2")
 store = Store()
 current_pairing_code = ""
 
@@ -62,7 +62,7 @@ def dashboard():
             for s in ALL_SCOPES if s != "admin"
         )
         rows.append(f"""
-        <tr><td><b>{escape(device['name'])}</b><br><code>{escape(device['device_id'])}</code></td>
+        <tr><td><form method='post' action='/devices/{escape(device['device_id'])}/name'><input name='name' value='{escape(device['name'])}' maxlength='50' required><button>Rename</button></form><code>{escape(device['device_id'])}</code></td>
         <td>{state}</td>
         <td><form method='post' action='/devices/{escape(device['device_id'])}/scopes' class='scopes'>{boxes}<button>Save</button></form></td>
         <td><form method='post' action='/devices/{escape(device['device_id'])}/revoke'><button class='danger'>Revoke</button></form></td></tr>
@@ -74,9 +74,10 @@ def dashboard():
     admin_url = "http://127.0.0.1:8766"
     remote_url = tunnel.public_url or "Waiting for tunnel…"
     online_class = "online" if tunnel.status == "online" else "warn"
+    home_name = store.home_name()
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.5.1</title>
+<title>JARVIS v0.5.2</title>
 <style>
 :root{{color-scheme:dark}}body{{font-family:system-ui;background:#080c12;color:#edf2f7;max-width:1200px;margin:0 auto;padding:32px 20px}}
 .card{{background:#111824;border:1px solid #263346;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 12px 40px #0004}}
@@ -88,7 +89,7 @@ table{{width:100%;border-collapse:collapse}}td,th{{text-align:left;padding:14px;
 input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#edf2f7;border:1px solid #263346;border-radius:10px;padding:12px 14px;font-size:16px}}#assistantReply{{white-space:pre-wrap;line-height:1.5}}.listening{{background:#a12c48}}
 @media(max-width:700px){{.route-grid{{grid-template-columns:1fr}}}}
 </style></head><body>
-<h1>JARVIS <span class='small'>v0.4 voice assistant</span></h1><p class='small'>Windows Host Dashboard · local administration only</p>
+<h1>JARVIS <span class='small'>v0.5.2 voice assistant</span></h1><p class='small'>Windows Host Dashboard · local administration only</p>
 
 <div class='card'><h2>Assistant</h2>
 <p class='small'>Speak or type a request. Voice recognition and spoken replies use the native Windows speech engine.</p>
@@ -114,6 +115,7 @@ input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#ed
 
 <div class='card'><h2>Home inbox</h2>
 <p class='small'>Messages and explicitly shared locations from paired devices appear here.</p>
+<form method='post' action='/home/name'><input class='assistant' name='name' value='{escape(home_name)}' maxlength='50' required><button>Save Windows spoken name</button></form>
 <input id='homeMessage' class='assistant' placeholder='Send a message to paired devices'>
 <button type='button' onclick='sendHomeMessage()'>Send</button>
 <div id='homeInbox'>No messages yet.</div></div>
@@ -219,7 +221,7 @@ async function homeInbox() {{
     for (const item of messages) {{
       if (!knownHomeMessages.has(item.message_id)) {{
         knownHomeMessages.add(item.message_id);
-        if (homeInboxInitialized && (item.sender_name || 'Home JARVIS') !== 'Home JARVIS') incoming.push(item);
+        if (homeInboxInitialized && item.sender_device_id !== 'home') incoming.push(item);
       }}
     }}
     homeInboxInitialized = true;
@@ -390,6 +392,28 @@ def apply_windows_update():
 @admin_app.post("/devices/{device_id}/scopes")
 def save_scopes(device_id: str, scope: list[str] = Form(default=[])):
     store.set_scopes(device_id, scope)
+    return RedirectResponse(url="/", status_code=303)
+
+
+@admin_app.post("/devices/{device_id}/name")
+def rename_device(device_id: str, name: str = Form(...)):
+    clean = name.strip()
+    if not clean or len(clean) > 50:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="Device name must be 1 to 50 characters")
+    store.rename_device(device_id, clean)
+    return RedirectResponse(url="/", status_code=303)
+
+
+@admin_app.post("/home/name")
+def rename_home(name: str = Form(...)):
+    clean = name.strip()
+    if not clean or len(clean) > 50:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="Home name must be 1 to 50 characters")
+    store.set_home_name(clean)
     return RedirectResponse(url="/", status_code=303)
 
 

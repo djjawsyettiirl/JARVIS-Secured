@@ -25,8 +25,18 @@ def apply_update(current: Path, replacement: Path, expected_sha256: str) -> None
     if not replacement.is_file() or _sha256(replacement) != expected_sha256.lower():
         raise ValueError("The staged JARVIS update failed integrity verification")
 
+    # A one-file PyInstaller app has a parent bootloader and a child process.
+    # Closing only the child leaves the executable locked, so terminate every
+    # JARVIS process before attempting the atomic replacement.
+    subprocess.run(
+        ["taskkill", "/F", "/IM", "JARVIS.exe"],
+        capture_output=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        check=False,
+    )
+    time.sleep(1)
     incoming = current.with_name("JARVIS.new.exe")
-    for _ in range(60):
+    for _ in range(120):
         try:
             shutil.copy2(replacement, incoming)
             os.replace(incoming, current)

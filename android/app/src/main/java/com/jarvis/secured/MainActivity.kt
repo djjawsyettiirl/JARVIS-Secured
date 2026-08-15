@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var host: EditText
     private lateinit var code: EditText
     private lateinit var status: TextView
+    private lateinit var spokenName: EditText
     private lateinit var permissionStatus: TextView
     private lateinit var scopesStatus: TextView
     private lateinit var assistantInput: EditText
@@ -69,6 +70,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         refreshPermissions()
         val prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
         host.setText(prefs.getString("host", "http://192.168.1.100:8765"))
+        spokenName.setText(prefs.getString("spoken_name", "${Build.MANUFACTURER} ${Build.MODEL}".trim()))
         val savedDevice = prefs.getString("device_id", null)
         if (savedDevice != null) refreshSession(host.text.toString().trim().trimEnd('/'), savedDevice)
         if (!prefs.getBoolean("permissions_onboarded", false)) {
@@ -118,6 +120,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setOnClickListener { pairDevice() }
         }
         status = TextView(this).apply { text = "Not paired"; textSize = 17f; setPadding(0, 12, 0, 8) }
+        spokenName = EditText(this).apply { hint = "Name spoken by Windows"; maxLines = 1 }
+        val saveSpokenName = Button(this).apply {
+            text = "SAVE SPOKEN DEVICE NAME"
+            setOnClickListener { saveSpokenDeviceName() }
+        }
         scopesStatus = TextView(this).apply { textSize = 15f }
         val assistantTitle = TextView(this).apply { text = "Assistant"; textSize = 22f; setPadding(0, 28, 0, 8) }
         assistantInput = EditText(this).apply { hint = "Ask JARVIS"; maxLines = 3 }
@@ -157,6 +164,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         root.addView(code)
         root.addView(pair)
         root.addView(status)
+        root.addView(spokenName)
+        root.addView(saveSpokenName)
         root.addView(scopesStatus)
         root.addView(assistantTitle)
         root.addView(assistantInput)
@@ -262,7 +271,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         Thread {
             try {
                 ensureKeyPair()
-                val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
+                val deviceName = spokenName.text.toString().trim().ifEmpty { "${Build.MANUFACTURER} ${Build.MODEL}".trim() }
                 val payload = JSONObject().apply {
                     put("code", pairingCode)
                     put("device_name", deviceName)
@@ -281,6 +290,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     } ?: emptyList()
                     getSharedPreferences("jarvis", MODE_PRIVATE).edit()
                         .putString("host", baseUrl).putString("device_id", deviceId)
+                        .putString("spoken_name", deviceName)
                         .putStringSet("scopes", scopes.toSet()).commit()
                     authenticate(baseUrl, deviceId, challenge)
                 }
@@ -329,6 +339,38 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             } catch (e: Exception) {
                 runOnUiThread { status.text = "Reconnect failed: ${e.message ?: "connection error"}" }
+            }
+        }.start()
+    }
+
+    private fun saveSpokenDeviceName() {
+        val name = spokenName.text.toString().trim()
+        if (name.isEmpty() || name.length > 50) {
+            assistantReply.text = "Choose a spoken name between 1 and 50 characters."
+            return
+        }
+        val token = sessionToken
+        if (token == null) {
+            assistantReply.text = "Pair or reconnect to the Windows host first."
+            return
+        }
+        val baseUrl = host.text.toString().trim().trimEnd('/')
+        Thread {
+            try {
+                val payload = JSONObject().put("name", name)
+                val request = Request.Builder().url("$baseUrl/device/name")
+                    .header("Authorization", "Bearer $token")
+                    .post(payload.toString().toRequestBody(jsonType)).build()
+                http.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val body = response.body?.string() ?: "{}"
+                        error(JSONObject(body).optString("detail", "Rename failed"))
+                    }
+                }
+                getSharedPreferences("jarvis", MODE_PRIVATE).edit().putString("spoken_name", name).apply()
+                runOnUiThread { assistantReply.text = "Windows will now announce messages from $name." }
+            } catch (e: Exception) {
+                runOnUiThread { assistantReply.text = "Rename failed: ${e.message ?: "connection error"}" }
             }
         }.start()
     }

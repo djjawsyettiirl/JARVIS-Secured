@@ -83,8 +83,13 @@ class Store:
                     delivered INTEGER NOT NULL DEFAULT 0,
                     PRIMARY KEY(message_id, recipient_device_id)
                 );
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
                 """
             )
+            c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('home_name','Home JARVIS')")
             cols = {row[1] for row in c.execute("PRAGMA table_info(devices)").fetchall()}
             if "scopes_json" not in cols:
                 c.execute("ALTER TABLE devices ADD COLUMN scopes_json TEXT NOT NULL DEFAULT '[\"chat\",\"pc_status\",\"notifications\"]'")
@@ -153,6 +158,23 @@ class Store:
         with self._conn() as c:
             return c.execute("SELECT device_id,name,created_at,revoked,scopes_json FROM devices ORDER BY created_at DESC").fetchall()
 
+    def rename_device(self, device_id: str, name: str) -> bool:
+        with self._conn() as c:
+            c.execute("UPDATE devices SET name=? WHERE device_id=?", (name.strip(), device_id))
+            return c.execute("SELECT changes()").fetchone()[0] == 1
+
+    def home_name(self) -> str:
+        with self._conn() as c:
+            row = c.execute("SELECT value FROM settings WHERE key='home_name'").fetchone()
+            return str(row["value"]) if row else "Home JARVIS"
+
+    def set_home_name(self, name: str) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO settings(key,value) VALUES('home_name',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (name.strip(),),
+            )
+
     def add_reminder(self, message: str, due_at: float) -> str:
         reminder_id = secrets.token_urlsafe(12)
         with self._conn() as c:
@@ -200,14 +222,15 @@ class Store:
         with self._conn() as c:
             rows = c.execute(
                 """
-                SELECT m.message_id,m.body,m.created_at,COALESCE(d.name,'Home JARVIS') AS sender_name
+                SELECT m.message_id,m.sender_device_id,m.body,m.created_at,
+                       CASE WHEN m.sender_device_id='home' THEN ? ELSE COALESCE(d.name,'Paired device') END AS sender_name
                 FROM messages m
                 JOIN message_receipts r ON r.message_id=m.message_id
                 LEFT JOIN devices d ON d.device_id=m.sender_device_id
                 WHERE r.recipient_device_id=? AND r.delivered=0
                 ORDER BY m.created_at
                 """,
-                (device_id,),
+                (self.home_name(), device_id),
             ).fetchall()
             if mark_delivered and rows:
                 c.executemany(
@@ -220,9 +243,10 @@ class Store:
         with self._conn() as c:
             return [dict(row) for row in c.execute(
                 """
-                SELECT m.message_id,m.body,m.created_at,COALESCE(d.name,'Home JARVIS') AS sender_name
+                SELECT m.message_id,m.sender_device_id,m.body,m.created_at,
+                       CASE WHEN m.sender_device_id='home' THEN ? ELSE COALESCE(d.name,'Paired device') END AS sender_name
                 FROM messages m LEFT JOIN devices d ON d.device_id=m.sender_device_id
                 ORDER BY m.created_at DESC LIMIT ?
                 """,
-                (limit,),
+                (self.home_name(), limit),
             ).fetchall()]

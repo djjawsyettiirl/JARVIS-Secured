@@ -171,7 +171,10 @@ class Updater:
             raise FileNotFoundError("The downloaded Windows artifact did not contain JARVIS.exe")
         companion = Path(sys.executable).with_name("JARVIS-Updater.exe")
         if not companion.is_file():
-            raise FileNotFoundError("JARVIS-Updater.exe is missing. Install v0.4.8 manually once to enable internal updates.")
+            raise FileNotFoundError("JARVIS-Updater.exe is missing. Install the current package manually once to enable internal updates.")
+        replacement_companion = next(extracted.rglob("JARVIS-Updater.exe"), None)
+        if replacement_companion:
+            shutil.copy2(replacement_companion, companion)
         digest = hashlib.sha256(replacement.read_bytes()).hexdigest()
         subprocess.Popen(
             [str(companion), "--current", str(Path(sys.executable)), "--replacement", str(replacement), "--sha256", digest],

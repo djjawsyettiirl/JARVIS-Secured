@@ -16,7 +16,7 @@ from .store import Store
 from .assistant import respond
 from .updater import updater
 
-app = FastAPI(title="JARVIS Secure Host", version="0.5.1")
+app = FastAPI(title="JARVIS Secure Host", version="0.5.2")
 store = Store()
 challenges: dict[str, tuple[str, float]] = {}
 sessions: dict[str, tuple[str, float]] = {}
@@ -51,6 +51,10 @@ class AssistantRequest(BaseModel):
 
 class MessageRequest(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
+
+
+class DeviceNameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
 
 
 def _load_public_key(pem: str):
@@ -208,6 +212,13 @@ def messages(authorization: str | None = Header(default=None)):
     if "messaging" not in store.get_scopes(device_id):
         raise HTTPException(status_code=403, detail="This device does not have the messaging capability")
     return store.device_messages(device_id)
+
+
+@app.post("/device/name")
+def rename_current_device(request: DeviceNameRequest, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization)
+    store.rename_device(device_id, request.name.strip())
+    return {"renamed": True, "name": request.name.strip()}
 
 
 @app.get("/updates/android/status")
