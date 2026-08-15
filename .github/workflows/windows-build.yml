@@ -24,7 +24,7 @@ jobs:
       - name: Stamp private build identity
         shell: pwsh
         run: |
-          @{ version = '0.4.7'; commit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content host/build-info.json
+          @{ version = '0.4.8'; commit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content host/build-info.json
       - name: Bundle Windows speech engine
         shell: pwsh
         run: |
@@ -33,19 +33,24 @@ jobs:
           Copy-Item 'system-speech-package/lib/net462/System.Speech.dll' 'host/System.Speech.dll'
       - name: Build Windows host executable
         run: pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS --paths host --collect-all uvicorn --collect-all fastapi --collect-all cryptography --hidden-import cryptography.hazmat.bindings._rust --collect-all googleapiclient --collect-all google_auth_oauthlib --collect-all keyring --collect-all openai --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr --add-binary "host/cloudflared.exe;." --add-binary "host/System.Speech.dll;." --add-data "host/build-info.json;." host/run_host.py
+      - name: Build companion updater
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS-Updater host/run_updater.py
       - name: Smoke test packaged executable
         shell: pwsh
         run: |
           $env:JARVIS_SMOKE_TEST = '1'
           $process = Start-Process -FilePath 'dist/JARVIS.exe' -PassThru -Wait -WindowStyle Hidden
           if ($process.ExitCode -ne 0) { throw "Packaged JARVIS smoke test failed with exit code $($process.ExitCode)" }
+          $updater = Start-Process -FilePath 'dist/JARVIS-Updater.exe' -ArgumentList '--help' -PassThru -Wait -WindowStyle Hidden
+          if ($updater.ExitCode -ne 0) { throw "Packaged updater smoke test failed with exit code $($updater.ExitCode)" }
       - name: Prepare package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item dist/JARVIS.exe package/JARVIS.exe
+          Copy-Item dist/JARVIS-Updater.exe package/JARVIS-Updater.exe
           @'
-          JARVIS for Windows v0.4.7
+          JARVIS for Windows v0.4.8
 
           Run JARVIS.exe. It opens as a standalone Windows desktop application.
           The secure host, dashboard, and Cloudflare tunnel run inside the app.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -133,16 +134,14 @@ class Updater:
         replacement = next(extracted.rglob("JARVIS.exe"), None)
         if not replacement:
             raise FileNotFoundError("The downloaded Windows artifact did not contain JARVIS.exe")
-        script = self.update_dir / "apply-update.cmd"
-        script.write_text(
-            "@echo off\r\n"
-            "timeout /t 3 /nobreak >nul\r\n"
-            f'copy /y "{replacement}" "{Path(sys.executable)}" >nul\r\n'
-            f'start "" "{Path(sys.executable)}"\r\n'
-            'del "%~f0"\r\n',
-            encoding="utf-8",
+        companion = Path(sys.executable).with_name("JARVIS-Updater.exe")
+        if not companion.is_file():
+            raise FileNotFoundError("JARVIS-Updater.exe is missing. Install v0.4.8 manually once to enable internal updates.")
+        digest = hashlib.sha256(replacement.read_bytes()).hexdigest()
+        subprocess.Popen(
+            [str(companion), "--current", str(Path(sys.executable)), "--replacement", str(replacement), "--sha256", digest],
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-        subprocess.Popen(["cmd.exe", "/c", str(script)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return True
 
     def snapshot(self) -> dict[str, object]:
