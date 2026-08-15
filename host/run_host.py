@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 
@@ -17,6 +18,10 @@ def _start_tunnel_when_gateway_is_ready() -> None:
 
 
 def main() -> None:
+    # CI executes the packaged binary in this mode. Importing this module has
+    # already exercised native dependencies such as cryptography and pythonnet.
+    if os.environ.get("JARVIS_SMOKE_TEST") == "1":
+        return
     code = store.create_pairing()
     admin.current_pairing_code = code
 

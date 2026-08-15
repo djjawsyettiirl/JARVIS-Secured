@@ -13,7 +13,7 @@ from .google_account import google_account
 from .updater import updater
 from .online_assistant import online_assistant, MODEL as AI_MODEL
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.4.2")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.4.3")
 store = Store()
 current_pairing_code = ""
 
@@ -71,7 +71,7 @@ def dashboard():
     online_class = "online" if tunnel.status == "online" else "warn"
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.4.2</title>
+<title>JARVIS v0.4.3</title>
 <style>
 :root{{color-scheme:dark}}body{{font-family:system-ui;background:#080c12;color:#edf2f7;max-width:1200px;margin:0 auto;padding:32px 20px}}
 .card{{background:#111824;border:1px solid #263346;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 12px 40px #0004}}
