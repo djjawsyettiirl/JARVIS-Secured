@@ -18,7 +18,7 @@ from .assistant import respond
 from .updater import updater
 from . import tunnel
 
-app = FastAPI(title="JARVIS Secure Host", version="0.5.4")
+app = FastAPI(title="JARVIS Secure Host", version="0.5.5")
 store = Store()
 challenges: dict[str, tuple[str, float]] = {}
 sessions: dict[str, tuple[str, float]] = {}

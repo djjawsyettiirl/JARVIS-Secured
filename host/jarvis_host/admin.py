@@ -14,7 +14,7 @@ from .updater import updater
 from .online_assistant import online_assistant, MODEL as AI_MODEL
 from .windows_voice import windows_voice
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.4")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.5")
 store = Store()
 current_pairing_code = ""
 
@@ -29,6 +29,11 @@ class ApiKeyRequest(BaseModel):
 
 class VoiceRequest(AssistantRequest):
     queue: bool = False
+
+
+class TunnelConfigRequest(BaseModel):
+    token: str = Field(min_length=80, max_length=4096)
+    hostname: str = Field(min_length=10, max_length=253)
 
 
 def _checked(scopes: list[str], name: str) -> str:
@@ -77,7 +82,7 @@ def dashboard():
     home_name = store.home_name()
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.5.4</title>
+<title>JARVIS v0.5.5</title>
 <style>
 :root{{color-scheme:dark;--bg:#070b12;--panel:#101826;--panel2:#0b121d;--line:#24334a;--text:#f4f7fb;--muted:#92a4ba;--blue:#3979ef;--blue2:#245cca}}
 *{{box-sizing:border-box}}body{{font-family:Inter,"Segoe UI",system-ui,sans-serif;background:radial-gradient(circle at 12% -10%,#16325f 0,transparent 32%),var(--bg);color:var(--text);max-width:1380px;margin:0 auto;padding:24px}}
@@ -93,7 +98,7 @@ input{{background:var(--panel2);color:var(--text);border:1px solid var(--line);b
 details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--line);border-radius:18px;padding:4px 18px 18px}}details.advanced>summary{{cursor:pointer;padding:16px 2px;font-weight:700;color:#b9c9dc;list-style:none}}details.advanced>summary:before{{content:'›';display:inline-block;margin-right:10px;transition:transform .2s}}details[open]>summary:before{{transform:rotate(90deg)}}
 @media(max-width:850px){{body{{padding:16px}}.dashboard,.settings-grid{{grid-template-columns:1fr}}.hero,.full{{grid-column:auto}}.route-grid{{grid-template-columns:1fr}}.app-header{{align-items:flex-start;flex-direction:column}}}}
 </style></head><body>
-<header class='app-header'><div class='brand'><div class='orb'></div><div><h1>JARVIS</h1><div class='small'>Windows voice assistant · v0.5.4</div></div></div><span class='{online_class} badge'>Remote {escape(tunnel.status)}</span></header>
+<header class='app-header'><div class='brand'><div class='orb'></div><div><h1>JARVIS</h1><div class='small'>Windows voice assistant · v0.5.5</div></div></div><span class='{online_class} badge'>Remote {escape(tunnel.status)}</span></header>
 <main class='dashboard'>
 
 <section class='card hero'><h2>Assistant</h2>
@@ -143,6 +148,11 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 </div>
 
 <div class='card'><h2>Remote connection</h2><span id='tunnelBadge' class='{online_class} badge'>Tunnel: {escape(tunnel.status)}</span><p id='tunnelError' class='error'>{escape(tunnel.last_error)}</p>
+<p id='tunnelMode' class='small'>Mode: {'Permanent named tunnel' if tunnel.named_configured() else 'Temporary quick tunnel'}</p>
+<input id='tunnelHostname' class='assistant' placeholder='https://jarvis.yourdomain.com' value='{escape(tunnel.named_hostname())}'>
+<input id='tunnelToken' class='assistant' type='password' placeholder='Cloudflare tunnel token (eyJ...)' autocomplete='off'>
+<button type='button' onclick='saveNamedTunnel()'>Use permanent tunnel</button>
+<button class='secondary' type='button' onclick='clearNamedTunnel()'>Return to temporary tunnel</button>
 
 <form method='get' action='/'>
 <button class='secondary'>Refresh status now</button>
@@ -152,7 +162,7 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 <button>Restart remote tunnel</button>
 </form>
 
-<p class='small'>Refresh status re-checks the current LAN address and tunnel status without restarting JARVIS. The temporary trycloudflare.com URL is HTTPS and changes whenever the tunnel restarts. It is for testing only.</p></div>
+<p class='small'>Create the tunnel and public hostname in Cloudflare first. Route the hostname to <code>http://127.0.0.1:8765</code>, then paste its token and HTTPS hostname here. The token is protected by Windows Credential Manager.</p></div>
 <div class='card'><h2>Pair a device</h2><p class='small'>This code can be used exactly once and expires after five minutes.</p><div class='code'>{escape(current_pairing_code or '—')}</div><form method='post' action='/pairing/new'><button>Generate new pairing code</button></form></div>
 <div class='card full'><h2>Devices & permissions</h2><table><tr><th>Device</th><th>Status</th><th>JARVIS capabilities</th><th>Security</th></tr>{''.join(rows) or '<tr><td colspan=4>No devices paired yet.</td></tr>'}</table></div>
 <div class='card'><h2>Security</h2><span class='badge'>ECDSA P-256 device authentication enabled</span><p class='small'>Only port 8765 is proxied through the remote tunnel. This admin dashboard remains bound to 127.0.0.1:8766 and is never published.</p></div>
@@ -207,7 +217,22 @@ async function tunnelStatus() {{
     badge.className = (data.status === 'online' ? 'online' : 'warn') + ' badge';
     document.getElementById('remoteUrl').textContent = data.public_url || 'Waiting for tunnel…';
     document.getElementById('tunnelError').textContent = data.error || '';
+    document.getElementById('tunnelMode').textContent = 'Mode: ' + (data.mode === 'named' ? 'Permanent named tunnel' : 'Temporary quick tunnel');
   }} catch (_) {{}}
+}}
+async function saveNamedTunnel() {{
+  const token = document.getElementById('tunnelToken').value.trim();
+  const hostname = document.getElementById('tunnelHostname').value.trim();
+  const response = await fetch('/tunnel/named', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{token,hostname}})}});
+  const data = await response.json();
+  if (!response.ok) {{ document.getElementById('tunnelError').textContent = data.detail || 'Could not save tunnel'; return; }}
+  document.getElementById('tunnelToken').value = '';
+  tunnelStatus();
+}}
+async function clearNamedTunnel() {{
+  await fetch('/tunnel/named', {{method:'DELETE'}});
+  document.getElementById('tunnelHostname').value = '';
+  tunnelStatus();
 }}
 async function checkAlarms() {{
   try {{
@@ -278,7 +303,26 @@ def restart_tunnel():
 
 @admin_app.get("/tunnel/status")
 def tunnel_status():
-    return {"status": tunnel.status, "public_url": tunnel.public_url, "error": tunnel.last_error}
+    return tunnel.snapshot()
+
+
+@admin_app.post("/tunnel/named")
+def save_named_tunnel(request: TunnelConfigRequest):
+    try:
+        tunnel.configure_named(request.token, request.hostname)
+        tunnel.restart_tunnel()
+        return tunnel.snapshot()
+    except Exception as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@admin_app.delete("/tunnel/named")
+def clear_named_tunnel():
+    tunnel.clear_named()
+    tunnel.restart_tunnel()
+    return tunnel.snapshot()
 
 
 @admin_app.get("/google/status")
