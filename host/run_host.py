@@ -1,10 +1,18 @@
 import threading
+import time
 
 import uvicorn
 
 from jarvis_host.app import app, store
 from jarvis_host.admin import admin_app
 import jarvis_host.admin as admin
+from jarvis_host import tunnel
+
+
+def _start_tunnel_when_gateway_is_ready() -> None:
+    # Give Uvicorn a moment to bind before cloudflared begins probing it.
+    time.sleep(1.0)
+    tunnel.start_quick_tunnel()
 
 
 if __name__ == "__main__":
@@ -18,5 +26,6 @@ if __name__ == "__main__":
         uvicorn.Config(admin_app, host="127.0.0.1", port=8766, log_level="warning")
     )
     threading.Thread(target=admin_server.run, daemon=True).start()
+    threading.Thread(target=_start_tunnel_when_gateway_is_ready, daemon=True).start()
 
     uvicorn.run(app, host="0.0.0.0", port=8765)

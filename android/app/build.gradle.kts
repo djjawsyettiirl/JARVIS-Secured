@@ -11,8 +11,27 @@ android {
         applicationId = "com.jarvis.secured"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 4
+        versionName = "0.4.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("JARVIS_KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("JARVIS_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("JARVIS_KEY_ALIAS")
+                keyPassword = System.getenv("JARVIS_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
     }
 
     compileOptions {

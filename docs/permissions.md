@@ -33,6 +33,13 @@ These are JARVIS-level permissions and are independent of OS permissions:
 - `files_read` — read explicitly selected files
 - `files_write` — write explicitly selected files
 - `pc_control` — execute approved PC automation actions; this should require explicit confirmation for destructive actions
+- `google_gmail` — read Gmail summaries through the Google account connected on the Windows host
+- `google_calendar` — read and manage Calendar events through the connected Google account
+- `maps` — open Google Maps searches and directions
+- `alarms` — create and announce local JARVIS alarms and reminders
+- `messaging` — exchange messages through the authenticated Windows home client
+- `location_share` — fetch and share the phone's location only after an explicit request
+- `software_updates` — check and download a privately staged Android update from the paired host
 - `admin` — reserved for the host owner; never granted automatically to a newly paired phone
 
 Default newly paired devices should start with the least privilege needed for basic chat and status. The Windows control panel will become the place where the owner grants/revokes scopes.

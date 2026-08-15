@@ -81,3 +81,73 @@ def test_unknown_device_cannot_authenticate():
     client = TestClient(app)
     response = client.post("/auth/challenge?device_id=does-not-exist")
     assert response.status_code == 401
+
+
+def test_authenticated_assistant_requires_device_capability(monkeypatch, tmp_path):
+    fresh_store(monkeypatch, tmp_path)
+    client = TestClient(app)
+    key, public = key_pem()
+    result = pair(client, key, public, store.create_pairing(ttl_seconds=300))
+    signature = key.sign(result["challenge"].encode(), ec.ECDSA(hashes.SHA256()))
+    auth = client.post(
+        "/auth/verify",
+        json={"device_id": result["device_id"], "signature_b64": b64url(signature)},
+    )
+    token = auth.json()["session_token"]
+
+    denied = client.post(
+        "/assistant",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": "navigate to Seattle"},
+    )
+    assert denied.status_code == 400
+    assert "maps capability" in denied.json()["detail"]
+
+    store.set_scopes(result["device_id"], ["chat", "maps"])
+    allowed = client.post(
+        "/assistant",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": "navigate to Seattle"},
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["action"]["type"] == "open_url"
+
+
+def test_assistant_rejects_missing_session():
+    client = TestClient(app)
+    response = client.post("/assistant", json={"message": "hello"})
+    assert response.status_code == 401
+
+
+def authenticate_device(client, key, pairing_result):
+    signature = key.sign(pairing_result["challenge"].encode(), ec.ECDSA(hashes.SHA256()))
+    response = client.post(
+        "/auth/verify",
+        json={"device_id": pairing_result["device_id"], "signature_b64": b64url(signature)},
+    )
+    return response.json()["session_token"]
+
+
+def test_paired_devices_can_exchange_messages(monkeypatch, tmp_path):
+    fresh_store(monkeypatch, tmp_path)
+    client = TestClient(app)
+    first_key, first_public = key_pem()
+    second_key, second_public = key_pem()
+    first = pair(client, first_key, first_public, store.create_pairing())
+    second = pair(client, second_key, second_public, store.create_pairing())
+    store.set_scopes(first["device_id"], ["chat", "messaging", "location_share"])
+    store.set_scopes(second["device_id"], ["chat", "messaging"])
+    first_token = authenticate_device(client, first_key, first)
+    second_token = authenticate_device(client, second_key, second)
+
+    sent = client.post(
+        "/messages",
+        headers={"Authorization": f"Bearer {first_token}"},
+        json={"body": "I'm here: https://www.google.com/maps/search/?api=1&query=47.6,-122.3"},
+    )
+    received = client.get("/messages", headers={"Authorization": f"Bearer {second_token}"})
+
+    assert sent.status_code == 200
+    assert received.status_code == 200
+    assert received.json()[0]["sender_name"] == "Test Phone"
+    assert "google.com/maps" in received.json()[0]["body"]

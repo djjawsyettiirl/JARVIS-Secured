@@ -30,11 +30,20 @@ jobs:
           test -f build.gradle.kts
           test -f app/build.gradle.kts
           test -f gradle.properties
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Restore private Android signing key
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes('jarvis-release.jks', [Convert]::FromBase64String('${{ secrets.JARVIS_ANDROID_KEYSTORE_B64 }}'))
+      - name: Build signed private APK
+        env:
+          JARVIS_KEYSTORE_PATH: ${{ github.workspace }}/android/jarvis-release.jks
+          JARVIS_KEYSTORE_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEYSTORE_PASSWORD }}
+          JARVIS_KEY_ALIAS: ${{ secrets.JARVIS_ANDROID_KEY_ALIAS }}
+          JARVIS_KEY_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEY_PASSWORD }}
+        run: gradle assembleRelease --no-daemon --stacktrace
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: jarvis-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: jarvis-android-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error

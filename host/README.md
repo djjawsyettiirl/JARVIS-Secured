@@ -11,6 +11,11 @@ py host/run_host.py
 
 The host prints an 8-digit one-time pairing code. It expires after five minutes and is invalid after one successful pairing.
 
+Paired devices are retained in `%LOCALAPPDATA%\JARVIS\jarvis.db`. Existing
+portable-build data in `%PROGRAMDATA%\JARVIS\jarvis.db` is copied forward on
+first launch. Restarting either app does not require a new pairing code: Android
+uses its hardware-backed key to obtain a fresh one-hour assistant session.
+
 Find the PC's LAN IPv4 address with:
 
 ```powershell

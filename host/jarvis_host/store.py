@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import secrets
+import shutil
 import sqlite3
 import time
 from pathlib import Path
@@ -12,7 +13,8 @@ from pathlib import Path
 DEFAULT_SCOPES = ["chat", "pc_status", "notifications"]
 ALL_SCOPES = [
     "chat", "pc_status", "notifications", "microphone", "camera",
-    "files_read", "files_write", "pc_control", "admin",
+    "files_read", "files_write", "pc_control", "google_gmail",
+    "google_calendar", "maps", "alarms", "messaging", "location_share", "software_updates", "admin",
 ]
 
 
@@ -23,7 +25,17 @@ class Store:
         elif os.environ.get("JARVIS_DATA_DIR"):
             self.path = Path(os.environ["JARVIS_DATA_DIR"]) / "jarvis.db"
         elif os.name == "nt":
-            self.path = Path(os.environ.get("PROGRAMDATA", Path.home())) / "JARVIS" / "jarvis.db"
+            # The portable EXE runs as the signed-in user. LOCALAPPDATA is stable
+            # across restarts and writable without requiring administrator rights.
+            local_path = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "JARVIS" / "jarvis.db"
+            legacy_path = Path(os.environ.get("PROGRAMDATA", Path.home())) / "JARVIS" / "jarvis.db"
+            if not local_path.exists() and legacy_path.exists():
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    shutil.copy2(legacy_path, local_path)
+                except OSError:
+                    pass
+            self.path = local_path
         else:
             self.path = Path("jarvis.db")
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,6 +64,24 @@ class Store:
                     created_at REAL NOT NULL,
                     revoked INTEGER NOT NULL DEFAULT 0,
                     scopes_json TEXT NOT NULL DEFAULT '["chat","pc_status","notifications"]'
+                );
+                CREATE TABLE IF NOT EXISTS reminders (
+                    reminder_id TEXT PRIMARY KEY,
+                    message TEXT NOT NULL,
+                    due_at REAL NOT NULL,
+                    delivered INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS messages (
+                    message_id TEXT PRIMARY KEY,
+                    sender_device_id TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    created_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS message_receipts (
+                    message_id TEXT NOT NULL,
+                    recipient_device_id TEXT NOT NULL,
+                    delivered INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(message_id, recipient_device_id)
                 );
                 """
             )
@@ -122,3 +152,77 @@ class Store:
     def list_devices(self):
         with self._conn() as c:
             return c.execute("SELECT device_id,name,created_at,revoked,scopes_json FROM devices ORDER BY created_at DESC").fetchall()
+
+    def add_reminder(self, message: str, due_at: float) -> str:
+        reminder_id = secrets.token_urlsafe(12)
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO reminders(reminder_id,message,due_at) VALUES(?,?,?)",
+                (reminder_id, message, due_at),
+            )
+        return reminder_id
+
+    def due_reminders(self, now: float | None = None) -> list[dict[str, object]]:
+        current = now if now is not None else time.time()
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT reminder_id,message,due_at FROM reminders WHERE delivered=0 AND due_at<=? ORDER BY due_at",
+                (current,),
+            ).fetchall()
+            if rows:
+                c.executemany("UPDATE reminders SET delivered=1 WHERE reminder_id=?", [(row["reminder_id"],) for row in rows])
+            return [dict(row) for row in rows]
+
+    def pending_reminders(self) -> list[dict[str, object]]:
+        with self._conn() as c:
+            return [dict(row) for row in c.execute(
+                "SELECT reminder_id,message,due_at FROM reminders WHERE delivered=0 ORDER BY due_at"
+            ).fetchall()]
+
+    def send_message(self, sender_device_id: str, body: str) -> str:
+        message_id = secrets.token_urlsafe(12)
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO messages(message_id,sender_device_id,body,created_at) VALUES(?,?,?,?)",
+                (message_id, sender_device_id, body, time.time()),
+            )
+            recipients = c.execute(
+                "SELECT device_id FROM devices WHERE revoked=0 AND device_id<>?",
+                (sender_device_id,),
+            ).fetchall()
+            c.executemany(
+                "INSERT INTO message_receipts(message_id,recipient_device_id) VALUES(?,?)",
+                [(message_id, row["device_id"]) for row in recipients],
+            )
+        return message_id
+
+    def device_messages(self, device_id: str, mark_delivered: bool = True) -> list[dict[str, object]]:
+        with self._conn() as c:
+            rows = c.execute(
+                """
+                SELECT m.message_id,m.body,m.created_at,COALESCE(d.name,'Home JARVIS') AS sender_name
+                FROM messages m
+                JOIN message_receipts r ON r.message_id=m.message_id
+                LEFT JOIN devices d ON d.device_id=m.sender_device_id
+                WHERE r.recipient_device_id=? AND r.delivered=0
+                ORDER BY m.created_at
+                """,
+                (device_id,),
+            ).fetchall()
+            if mark_delivered and rows:
+                c.executemany(
+                    "UPDATE message_receipts SET delivered=1 WHERE message_id=? AND recipient_device_id=?",
+                    [(row["message_id"], device_id) for row in rows],
+                )
+            return [dict(row) for row in rows]
+
+    def recent_messages(self, limit: int = 20) -> list[dict[str, object]]:
+        with self._conn() as c:
+            return [dict(row) for row in c.execute(
+                """
+                SELECT m.message_id,m.body,m.created_at,COALESCE(d.name,'Home JARVIS') AS sender_name
+                FROM messages m LEFT JOIN devices d ON d.device_id=m.sender_device_id
+                ORDER BY m.created_at DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()]
