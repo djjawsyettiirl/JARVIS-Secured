@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import threading
+import sys
+from pathlib import Path
 
 
 class WindowsVoice:
@@ -14,12 +16,16 @@ class WindowsVoice:
             raise RuntimeError("Windows voice is available only in the packaged Windows app")
         import clr
 
-        clr.AddReference("System.Speech")
+        bundled = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1])) / "System.Speech.dll"
+        clr.AddReference(str(bundled) if bundled.is_file() else "System.Speech")
         from System import TimeSpan
         from System.Speech.Recognition import DictationGrammar, SpeechRecognitionEngine
         from System.Speech.Synthesis import SpeechSynthesizer
 
         return TimeSpan, DictationGrammar, SpeechRecognitionEngine, SpeechSynthesizer
+
+    def validate(self) -> None:
+        self._speech_types()
 
     def listen(self, timeout_seconds: int = 10) -> str:
         TimeSpan, DictationGrammar, SpeechRecognitionEngine, _ = self._speech_types()

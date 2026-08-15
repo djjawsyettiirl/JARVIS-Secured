@@ -21,6 +21,9 @@ def main() -> None:
     # CI executes the packaged binary in this mode. Importing this module has
     # already exercised native dependencies such as cryptography and pythonnet.
     if os.environ.get("JARVIS_SMOKE_TEST") == "1":
+        from jarvis_host.windows_voice import windows_voice
+
+        windows_voice.validate()
         return
     code = store.create_pairing()
     admin.current_pairing_code = code
