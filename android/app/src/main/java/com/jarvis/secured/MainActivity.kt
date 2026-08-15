@@ -14,6 +14,8 @@ import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.util.Base64
+import android.text.util.Linkify
+import android.text.method.LinkMovementMethod
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -50,6 +52,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var scopesStatus: TextView
     private lateinit var assistantInput: EditText
     private lateinit var assistantReply: TextView
+    private lateinit var inboxInput: EditText
+    private lateinit var inboxMessages: TextView
     private var sessionToken: String? = null
     private var tts: TextToSpeech? = null
     private val messageHandler = Handler(Looper.getMainLooper())
@@ -118,6 +122,27 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val speak = Button(this).apply { text = "SPEAK TO JARVIS"; setOnClickListener { startVoiceInput() } }
         val update = Button(this).apply { text = "CHECK PRIVATE UPDATE"; setOnClickListener { installPrivateUpdate() } }
         assistantReply = TextView(this).apply { text = "Pair with the Windows host to begin."; textSize = 17f; setPadding(0, 12, 0, 20) }
+        val inboxTitle = TextView(this).apply { text = "Home inbox"; textSize = 22f; setPadding(0, 28, 0, 8) }
+        val inboxHelp = TextView(this).apply {
+            text = "Messages and explicitly shared locations from Windows appear here."
+            textSize = 15f
+            setPadding(0, 0, 0, 8)
+        }
+        inboxInput = EditText(this).apply {
+            hint = "Send a message to the Windows client"
+            maxLines = 3
+        }
+        val sendInbox = Button(this).apply {
+            text = "SEND TO WINDOWS"
+            setOnClickListener { sendInboxMessage() }
+        }
+        inboxMessages = TextView(this).apply {
+            textSize = 17f
+            setPadding(0, 12, 0, 24)
+            autoLinkMask = Linkify.WEB_URLS
+            movementMethod = LinkMovementMethod.getInstance()
+        }
+        renderInbox()
 
         root.addView(title)
         root.addView(subtitle)
@@ -136,6 +161,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         root.addView(speak)
         root.addView(update)
         root.addView(assistantReply)
+        root.addView(inboxTitle)
+        root.addView(inboxHelp)
+        root.addView(inboxInput)
+        root.addView(sendInbox)
+        root.addView(inboxMessages)
         val scroll = ScrollView(this).apply { addView(root) }
         setContentView(scroll)
     }
@@ -403,6 +433,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     if (!response.isSuccessful) error(JSONObject(body).optString("detail", "Message failed"))
                 }
                 runOnUiThread {
+                    appendInboxMessage("You", message)
+                    if (::inboxInput.isInitialized && inboxInput.text.toString().trim() == message) inboxInput.text.clear()
                     val confirmation = "Message sent to the Windows home client."
                     assistantReply.text = confirmation
                     tts?.speak(confirmation, TextToSpeech.QUEUE_FLUSH, null, "jarvis-message-sent")
@@ -411,6 +443,39 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 runOnUiThread { assistantReply.text = "Message failed: ${e.message ?: "connection error"}" }
             }
         }.start()
+    }
+
+    private fun sendInboxMessage() {
+        val message = inboxInput.text.toString().trim()
+        if (message.isEmpty()) return
+        val token = sessionToken
+        if (token == null) {
+            assistantReply.text = "Pair or reconnect to the Windows host first."
+            return
+        }
+        sendMessageToHome(host.text.toString().trim().trimEnd('/'), token, message)
+    }
+
+    private fun appendInboxMessage(sender: String, body: String) {
+        val prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
+        val history = runCatching {
+            val saved = org.json.JSONArray(prefs.getString("message_history", "[]"))
+            MutableList(saved.length()) { index -> saved.getString(index) }
+        }.getOrDefault(mutableListOf())
+        history.add("$sender: $body")
+        val recent = history.takeLast(50)
+        prefs.edit().putString("message_history", org.json.JSONArray(recent).toString()).apply()
+        renderInbox(recent)
+    }
+
+    private fun renderInbox(messages: List<String>? = null) {
+        if (!::inboxMessages.isInitialized) return
+        val history = messages ?: runCatching {
+            val saved = org.json.JSONArray(getSharedPreferences("jarvis", MODE_PRIVATE).getString("message_history", "[]"))
+            List(saved.length()) { index -> saved.getString(index) }
+        }.getOrDefault(emptyList())
+        inboxMessages.text = if (history.isEmpty()) "No messages yet." else history.asReversed().joinToString("\n\n")
+        Linkify.addLinks(inboxMessages, Linkify.WEB_URLS)
     }
 
     private fun startMessagePolling() {
@@ -438,6 +503,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         val item = items.getJSONObject(index)
                         val message = "${item.optString("sender_name", "JARVIS")}: ${item.getString("body")}"
                         runOnUiThread {
+                            appendInboxMessage(item.optString("sender_name", "Home JARVIS"), item.getString("body"))
                             assistantReply.text = message
                             tts?.speak(message, TextToSpeech.QUEUE_ADD, null, "jarvis-message-$index")
                         }
