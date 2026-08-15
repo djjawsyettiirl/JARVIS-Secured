@@ -57,7 +57,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var sessionToken: String? = null
     private var tts: TextToSpeech? = null
     private val messageHandler = Handler(Looper.getMainLooper())
+    private val updateHandler = Handler(Looper.getMainLooper())
     private var messagePolling = false
+    private var updatePolling = false
+    @Volatile private var updateCheckInProgress = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,7 +123,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         assistantInput = EditText(this).apply { hint = "Ask JARVIS"; maxLines = 3 }
         val ask = Button(this).apply { text = "ASK JARVIS"; setOnClickListener { askJarvis() } }
         val speak = Button(this).apply { text = "SPEAK TO JARVIS"; setOnClickListener { startVoiceInput() } }
-        val update = Button(this).apply { text = "CHECK PRIVATE UPDATE"; setOnClickListener { installPrivateUpdate() } }
+        val update = Button(this).apply { text = "CHECK PRIVATE UPDATE"; setOnClickListener { installPrivateUpdate(false) } }
         assistantReply = TextView(this).apply { text = "Pair with the Windows host to begin."; textSize = 17f; setPadding(0, 12, 0, 20) }
         val inboxTitle = TextView(this).apply { text = "Home inbox"; textSize = 22f; setPadding(0, 28, 0, 8) }
         val inboxHelp = TextView(this).apply {
@@ -308,6 +311,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 scopesStatus.text = "JARVIS capabilities\n" + (if (scopes.isEmpty()) "None" else scopes.joinToString("\n") { "• $it" })
                 if (ok) assistantReply.text = "Ready. Ask me about Gmail, Calendar, Maps, or alarms."
                 if (ok) startMessagePolling()
+                if (ok) startAutomaticUpdatePolling()
             }
         }
     }
@@ -513,14 +517,53 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }.start()
     }
 
-    private fun installPrivateUpdate() {
+    private fun startAutomaticUpdatePolling() {
+        if (updatePolling) return
+        updatePolling = true
+        updateHandler.postDelayed(object : Runnable {
+            override fun run() {
+                checkAutomaticUpdate()
+                if (updatePolling) updateHandler.postDelayed(this, 300_000)
+            }
+        }, 15_000)
+    }
+
+    private fun checkAutomaticUpdate() {
+        if (updateCheckInProgress) return
+        val token = sessionToken ?: return
+        val baseUrl = host.text.toString().trim().trimEnd('/')
+        Thread {
+            try {
+                val request = Request.Builder().url("$baseUrl/updates/android/status")
+                    .header("Authorization", "Bearer $token").get().build()
+                http.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use
+                    if (JSONObject(response.body?.string() ?: "{}").optBoolean("available", false)) {
+                        runOnUiThread { installPrivateUpdate(true) }
+                    }
+                }
+            } catch (_: Exception) { }
+        }.start()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun packageVersionCode(path: String? = null): Long? {
+        val info = if (path == null) packageManager.getPackageInfo(packageName, 0)
+        else packageManager.getPackageArchiveInfo(path, 0)
+        info ?: return null
+        return if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+    }
+
+    private fun installPrivateUpdate(automatic: Boolean) {
+        if (updateCheckInProgress) return
         val token = sessionToken
         if (token == null) {
             assistantReply.text = "Reconnect to the Windows host first."
             return
         }
+        updateCheckInProgress = true
         val baseUrl = host.text.toString().trim().trimEnd('/')
-        assistantReply.text = "Checking the private update staged on Windows..."
+        if (!automatic) assistantReply.text = "Checking the private update staged on Windows..."
         Thread {
             try {
                 val request = Request.Builder().url("$baseUrl/updates/android")
@@ -533,6 +576,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     val directory = File(cacheDir, "updates").apply { mkdirs() }
                     val apk = File(directory, "JARVIS-update.apk")
                     response.body?.byteStream()?.use { input -> apk.outputStream().use { output -> input.copyTo(output) } }
+                    val candidateVersion = packageVersionCode(apk.absolutePath) ?: error("The downloaded APK is invalid")
+                    val installedVersion = packageVersionCode() ?: 0L
+                    if (candidateVersion <= installedVersion) {
+                        apk.delete()
+                        if (!automatic) runOnUiThread { assistantReply.text = "Android JARVIS is already up to date." }
+                        return@use
+                    }
                     val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", apk)
                     runOnUiThread {
                         val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -544,7 +594,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     }
                 }
             } catch (e: Exception) {
-                runOnUiThread { assistantReply.text = "Update unavailable: ${e.message ?: "connection error"}" }
+                if (!automatic) runOnUiThread { assistantReply.text = "Update unavailable: ${e.message ?: "connection error"}" }
+            } finally {
+                updateCheckInProgress = false
             }
         }.start()
     }
@@ -568,6 +620,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         messagePolling = false
         messageHandler.removeCallbacksAndMessages(null)
+        updatePolling = false
+        updateHandler.removeCallbacksAndMessages(null)
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()

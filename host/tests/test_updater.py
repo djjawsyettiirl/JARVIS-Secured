@@ -56,3 +56,19 @@ def test_automatic_update_skips_current_windows_build(monkeypatch):
     monkeypatch.setattr(updater, "current_build", lambda: {"version": "0.4.9", "commit": "same"})
 
     assert updater.auto_install_if_available() is False
+
+
+def test_replaced_updates_move_to_old_development(monkeypatch, tmp_path):
+    updater = Updater()
+    archive = tmp_path / "Old Development"
+    monkeypatch.setattr(type(updater), "old_development_dir", property(lambda self: archive))
+    target = tmp_path / "updates" / "android"
+    target.mkdir(parents=True)
+    (target / "app-release.apk").write_bytes(b"old")
+
+    updater._archive_existing(target, "android-update")
+
+    assert not target.exists()
+    archived = list(archive.glob("android-update-*/app-release.apk"))
+    assert len(archived) == 1
+    assert archived[0].read_bytes() == b"old"

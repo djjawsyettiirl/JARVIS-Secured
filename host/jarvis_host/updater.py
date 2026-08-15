@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .google_account import data_dir
@@ -41,6 +42,23 @@ class Updater:
     @property
     def android_apk(self) -> Path:
         return self.update_dir / "android" / "app-release.apk"
+
+    @property
+    def old_development_dir(self) -> Path:
+        path = data_dir() / "Old Development"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _archive_existing(self, target: Path, label: str) -> None:
+        if not target.exists():
+            return
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        destination = self.old_development_dir / f"{label}-{stamp}"
+        suffix = 1
+        while destination.exists():
+            destination = self.old_development_dir / f"{label}-{stamp}-{suffix}"
+            suffix += 1
+        shutil.move(str(target), str(destination))
 
     def _gh(self) -> str:
         candidates = [
@@ -119,7 +137,7 @@ class Updater:
                 shutil.rmtree(pending, ignore_errors=True)
                 pending.mkdir(parents=True)
                 self._run("run", "download", str(self.windows_run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-windows-host", "-D", str(pending))
-                shutil.rmtree(target, ignore_errors=True)
+                self._archive_existing(target, "windows-update")
                 pending.replace(target)
             if self.android_run:
                 target = self.update_dir / "android"
@@ -129,7 +147,7 @@ class Updater:
                 self._run("run", "download", str(self.android_run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-android-apk", "-D", str(pending))
                 if not (pending / "app-release.apk").is_file():
                     raise FileNotFoundError("The latest Android build did not contain app-release.apk")
-                shutil.rmtree(target, ignore_errors=True)
+                self._archive_existing(target, "android-update")
                 pending.replace(target)
             self.status = "ready"
         except Exception as exc:
