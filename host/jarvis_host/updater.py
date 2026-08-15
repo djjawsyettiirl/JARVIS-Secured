@@ -97,14 +97,22 @@ class Updater:
             self.android_run = self._latest("android-build.yml")
             if self.windows_run:
                 target = self.update_dir / "windows"
+                pending = self.update_dir / "windows-next"
+                shutil.rmtree(pending, ignore_errors=True)
+                pending.mkdir(parents=True)
+                self._run("run", "download", str(self.windows_run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-windows-host", "-D", str(pending))
                 shutil.rmtree(target, ignore_errors=True)
-                target.mkdir(parents=True)
-                self._run("run", "download", str(self.windows_run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-windows-host", "-D", str(target))
+                pending.replace(target)
             if self.android_run:
                 target = self.update_dir / "android"
+                pending = self.update_dir / "android-next"
+                shutil.rmtree(pending, ignore_errors=True)
+                pending.mkdir(parents=True)
+                self._run("run", "download", str(self.android_run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-android-apk", "-D", str(pending))
+                if not (pending / "app-release.apk").is_file():
+                    raise FileNotFoundError("The latest Android build did not contain app-release.apk")
                 shutil.rmtree(target, ignore_errors=True)
-                target.mkdir(parents=True)
-                self._run("run", "download", str(self.android_run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-android-apk", "-D", str(target))
+                pending.replace(target)
             self.status = "ready"
         except Exception as exc:
             self.status = "error"
@@ -143,7 +151,7 @@ class Updater:
             "error": self.last_error,
             "windows_run": self.windows_run,
             "android_run": self.android_run,
-            "android_ready": self.android_apk.is_file(),
+            "android_ready": self.status == "ready" and self.android_apk.is_file(),
             "current_build": self.current_build(),
         }
 
