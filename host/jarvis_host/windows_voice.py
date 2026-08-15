@@ -41,14 +41,15 @@ class WindowsVoice:
             finally:
                 recognizer.Dispose()
 
-    def speak(self, text: str) -> None:
+    def speak(self, text: str, interrupt: bool = True) -> None:
         if not text.strip():
             return
         _, _, _, SpeechSynthesizer = self._speech_types()
         with self._lock:
             if self._synth is None:
                 self._synth = SpeechSynthesizer()
-            self._synth.SpeakAsyncCancelAll()
+            if interrupt:
+                self._synth.SpeakAsyncCancelAll()
             self._synth.SpeakAsync(text.strip())
 
 

@@ -14,7 +14,7 @@ from .updater import updater
 from .online_assistant import online_assistant, MODEL as AI_MODEL
 from .windows_voice import windows_voice
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.4.9")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.1")
 store = Store()
 current_pairing_code = ""
 
@@ -25,6 +25,10 @@ class AssistantRequest(BaseModel):
 
 class ApiKeyRequest(BaseModel):
     api_key: str = Field(min_length=20, max_length=300)
+
+
+class VoiceRequest(AssistantRequest):
+    queue: bool = False
 
 
 def _checked(scopes: list[str], name: str) -> str:
@@ -72,7 +76,7 @@ def dashboard():
     online_class = "online" if tunnel.status == "online" else "warn"
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.4.9</title>
+<title>JARVIS v0.5.1</title>
 <style>
 :root{{color-scheme:dark}}body{{font-family:system-ui;background:#080c12;color:#edf2f7;max-width:1200px;margin:0 auto;padding:32px 20px}}
 .card{{background:#111824;border:1px solid #263346;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 12px 40px #0004}}
@@ -148,8 +152,8 @@ input.assistant{{width:min(720px,calc(100% - 28px));background:#0b111a;color:#ed
 <script>
 const input = document.getElementById('assistantInput');
 input.addEventListener('keydown', event => {{ if (event.key === 'Enter') askJarvis(); }});
-async function speak(text) {{
-  try {{ await fetch('/voice/speak', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{message:text}})}}); }} catch (_) {{}}
+async function speak(text, queue = false) {{
+  try {{ await fetch('/voice/speak', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{message:text, queue}})}}); }} catch (_) {{}}
 }}
 async function askJarvis() {{
   const message = input.value.trim(); if (!message) return;
@@ -203,12 +207,26 @@ async function checkAlarms() {{
     for (const alarm of alarms) {{ const message = 'Alarm: ' + alarm.message; document.getElementById('assistantReply').textContent = message; speak(message); }}
   }} catch (_) {{}}
 }}
+const knownHomeMessages = new Set();
+let homeInboxInitialized = false;
 async function homeInbox() {{
   try {{
     const messages = await (await fetch('/messages/recent')).json();
     document.getElementById('homeInbox').innerHTML = messages.length ? messages.map(item =>
       '<p><b>' + escapeHtml(item.sender_name || 'Paired device') + '</b>: ' + linkify(escapeHtml(item.body)) + '</p>'
     ).join('') : 'No messages yet.';
+    const incoming = [];
+    for (const item of messages) {{
+      if (!knownHomeMessages.has(item.message_id)) {{
+        knownHomeMessages.add(item.message_id);
+        if (homeInboxInitialized && (item.sender_name || 'Home JARVIS') !== 'Home JARVIS') incoming.push(item);
+      }}
+    }}
+    homeInboxInitialized = true;
+    for (const item of incoming.reverse()) {{
+      const body = /https:\/\/www\.google\.com\/maps/.test(item.body) ? 'shared a location with you' : item.body;
+      await speak((item.sender_name || 'Paired device') + ' says: ' + body, true);
+    }}
   }} catch (_) {{}}
 }}
 function escapeHtml(value) {{ const node = document.createElement('div'); node.textContent = value; return node.innerHTML; }}
@@ -314,9 +332,9 @@ def voice_listen():
 
 
 @admin_app.post("/voice/speak")
-def voice_speak(request: AssistantRequest):
+def voice_speak(request: VoiceRequest):
     try:
-        windows_voice.speak(request.message)
+        windows_voice.speak(request.message, interrupt=not request.queue)
         return {"spoken": True}
     except Exception as exc:
         from fastapi import HTTPException
