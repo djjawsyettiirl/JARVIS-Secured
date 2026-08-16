@@ -8,7 +8,7 @@ router = APIRouter()
 def assistant_v1_home():
     return '''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Assistant Jarvis · V 1.0</title>
+<title>Assistant Jarvis · V 1.1</title>
 <style>
 :root{color-scheme:dark;--bg:#08090c;--panel:#15171c;--line:#2d3138;--text:#f3f4f6;--muted:#9aa3af;--accent:#e5e7eb}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#171a20 0,transparent 38%),var(--bg);color:var(--text);font-family:Inter,"Segoe UI",system-ui,sans-serif;height:100vh;overflow:hidden}
@@ -18,11 +18,11 @@ button{border:1px solid var(--line);background:#181b21;color:var(--text);border-
 .composer{display:flex;align-items:center;gap:8px;background:#17191e;border:1px solid var(--line);border-radius:30px;padding:7px 8px;box-shadow:0 18px 50px #0008}.target{min-width:92px}.composer input{flex:1;border:0;outline:0;background:transparent;color:var(--text);font-size:16px;padding:12px}.composer input::placeholder{color:#717986}.round{width:44px;height:44px;border-radius:50%;padding:0}.foot{text-align:center;color:#6f7782;font-size:11px;padding-top:9px}
 @media(max-width:700px){.shell{padding:14px}.hero h1{font-size:30px}.hero{padding-bottom:30px}.target{min-width:76px}}
 </style></head><body><div class="shell">
-<div class="top"><div><div class="brand">Assistant Jarvis</div><div class="version">V 1.0</div></div><div class="spacer"></div><button class="settings" onclick="location.href='/'" title="Settings">⚙ Settings</button></div>
+<div class="top"><div><div class="brand">Assistant Jarvis</div><div class="version">V 1.1</div></div><div class="spacer"></div><button class="settings" onclick="location.href='/'" title="Settings">⚙ Settings</button></div>
 <div id="status" class="status">● Windows host online</div>
 <div class="hero"><h1>What can I do for you?</h1><p>One bar for Jarvis actions and private device messaging.</p><div id="reply" class="reply">Ready.</div></div>
 <div class="composer"><button id="target" class="target" onclick="toggleTarget()">Jarvis</button><input id="message" placeholder="Ask Jarvis anything…" autocomplete="off"><button class="round" onclick="voice()">🎙</button><button class="round" onclick="send()">➤</button></div>
-<div class="foot">Assistant Jarvis · V 1.0</div></div>
+<div class="foot">Assistant Jarvis · V 1.1</div></div>
 <script>
 let homeMode=false;const input=document.getElementById('message'),reply=document.getElementById('reply'),target=document.getElementById('target');
 input.addEventListener('keydown',e=>{if(e.key==='Enter')send()});
