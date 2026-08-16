@@ -11,12 +11,13 @@ import jarvis_host.admin as admin
 from jarvis_host import tunnel
 from jarvis_host.updater import updater
 from jarvis_host import route_rendezvous
+from jarvis_host import assistant_ui
 
 app.include_router(route_rendezvous.router)
+admin_app.include_router(assistant_ui.router)
 
 
 def _start_tunnel_when_gateway_is_ready() -> None:
-    # Give Uvicorn a moment to bind before cloudflared begins probing it.
     time.sleep(1.0)
     while True:
         try:
@@ -28,9 +29,6 @@ def _start_tunnel_when_gateway_is_ready() -> None:
 
 
 def _route_handoff_loop() -> None:
-    # A Quick Tunnel URL changes whenever Cloudflare starts a fresh tunnel.
-    # Publish the replacement through an independent rendezvous channel so a
-    # paired phone can recover even when its saved tunnel URL is already dead.
     last_seen = ""
     while True:
         try:
@@ -39,7 +37,6 @@ def _route_handoff_loop() -> None:
                 route_rendezvous.publish_if_changed()
                 last_seen = current
         except Exception:
-            # Route handoff is a recovery aid. It must never stop the host.
             pass
         time.sleep(2)
 
@@ -58,11 +55,8 @@ def _automatic_update_loop() -> None:
 
 
 def main() -> None:
-    # CI executes the packaged binary in this mode. Importing this module has
-    # already exercised native dependencies such as cryptography and pythonnet.
     if os.environ.get("JARVIS_SMOKE_TEST") == "1":
         from jarvis_host.windows_voice import windows_voice
-
         windows_voice.validate()
         return
     code = store.create_pairing()
@@ -81,16 +75,14 @@ def main() -> None:
     )
     threading.Thread(target=gateway_server.run, daemon=True).start()
 
-    # The dashboard is hosted only inside this native desktop window. The local
-    # web service remains an implementation detail and no external browser opens.
     time.sleep(0.8)
     webview.create_window(
-        "JARVIS",
-        "http://127.0.0.1:8766",
+        "Assistant Jarvis · V 1.0",
+        "http://127.0.0.1:8766/assistant-v1",
         width=1280,
         height=860,
         min_size=(900, 650),
-        background_color="#080c12",
+        background_color="#08090c",
         text_select=True,
     )
     try:
