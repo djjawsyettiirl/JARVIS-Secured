@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import socket
+import time
+from datetime import datetime
 from html import escape
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -14,7 +16,7 @@ from .updater import updater
 from .online_assistant import online_assistant, MODEL as AI_MODEL
 from .windows_voice import windows_voice
 
-admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.5")
+admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.7-test")
 store = Store()
 current_pairing_code = ""
 
@@ -41,7 +43,6 @@ def _checked(scopes: list[str], name: str) -> str:
 
 
 def _lan_ip() -> str:
-    """Best-effort LAN IPv4 discovery without making an external connection."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.connect(("10.255.255.255", 1))
@@ -55,34 +56,58 @@ def _lan_ip() -> str:
         sock.close()
 
 
+def _device_state(device) -> tuple[str, str]:
+    if device["revoked"]:
+        return "REVOKED", "warn"
+    last_seen = device["last_seen"] or 0
+    age = time.time() - float(last_seen)
+    if last_seen and age <= 45:
+        return "CONNECTED NOW", "online"
+    return "PAIRED / OFFLINE", "warn"
+
+
+def _last_seen_text(value) -> str:
+    if not value:
+        return "Never"
+    age = max(0, int(time.time() - float(value)))
+    if age < 60:
+        return f"{age}s ago"
+    if age < 3600:
+        return f"{age // 60}m ago"
+    if age < 86400:
+        return f"{age // 3600}h ago"
+    return datetime.fromtimestamp(float(value)).strftime("%Y-%m-%d %H:%M")
+
+
 @admin_app.get("/", response_class=HTMLResponse)
 def dashboard():
     devices = store.list_devices()
     rows = []
     for device in devices:
         scopes = store.get_scopes(device["device_id"])
-        state = "Revoked" if device["revoked"] else "Active"
+        state, state_class = _device_state(device)
+        route = device["last_route"] or "unknown"
         boxes = " ".join(
             f"<label><input type='checkbox' name='scope' value='{s}' {_checked(scopes, s)}> {s}</label>"
             for s in ALL_SCOPES if s != "admin"
         )
+        revoke_button = "" if device["revoked"] else f"<form method='post' action='/devices/{escape(device['device_id'])}/revoke'><button class='danger'>Revoke</button></form>"
+        forget_button = f"<form method='post' action='/devices/{escape(device['device_id'])}/delete' onsubmit=\"return confirm('Permanently forget this paired device?');\"><button class='secondary'>Forget permanently</button></form>"
         rows.append(f"""
         <tr><td><form method='post' action='/devices/{escape(device['device_id'])}/name'><input name='name' value='{escape(device['name'])}' maxlength='50' required><button>Rename</button></form><code>{escape(device['device_id'])}</code></td>
-        <td>{state}</td>
+        <td><span class='{state_class} badge'>{state}</span><div class='small'>Last seen: {_last_seen_text(device['last_seen'])}<br>Last route: {escape(route)}</div></td>
         <td><form method='post' action='/devices/{escape(device['device_id'])}/scopes' class='scopes'>{boxes}<button>Save</button></form></td>
-        <td><form method='post' action='/devices/{escape(device['device_id'])}/revoke'><button class='danger'>Revoke</button></form></td></tr>
+        <td>{revoke_button}{forget_button}</td></tr>
         """)
 
     lan_ip = _lan_ip()
-    local_gateway = "http://127.0.0.1:8765"
     lan_gateway = f"http://{lan_ip}:8765" if lan_ip != "Unavailable" else "Unavailable"
-    admin_url = "http://127.0.0.1:8766"
     remote_url = tunnel.public_url or "Waiting for tunnel…"
     online_class = "online" if tunnel.status == "online" else "warn"
     home_name = store.home_name()
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>JARVIS v0.5.5</title>
+<title>JARVIS v0.5.7-test</title>
 <style>
 :root{{color-scheme:dark;--bg:#070b12;--panel:#101826;--panel2:#0b121d;--line:#24334a;--text:#f4f7fb;--muted:#92a4ba;--blue:#3979ef;--blue2:#245cca}}
 *{{box-sizing:border-box}}body{{font-family:Inter,"Segoe UI",system-ui,sans-serif;background:radial-gradient(circle at 12% -10%,#16325f 0,transparent 32%),var(--bg);color:var(--text);max-width:1380px;margin:0 auto;padding:24px}}
@@ -98,7 +123,7 @@ input{{background:var(--panel2);color:var(--text);border:1px solid var(--line);b
 details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--line);border-radius:18px;padding:4px 18px 18px}}details.advanced>summary{{cursor:pointer;padding:16px 2px;font-weight:700;color:#b9c9dc;list-style:none}}details.advanced>summary:before{{content:'›';display:inline-block;margin-right:10px;transition:transform .2s}}details[open]>summary:before{{transform:rotate(90deg)}}
 @media(max-width:850px){{body{{padding:16px}}.dashboard,.settings-grid{{grid-template-columns:1fr}}.hero,.full{{grid-column:auto}}.route-grid{{grid-template-columns:1fr}}.app-header{{align-items:flex-start;flex-direction:column}}}}
 </style></head><body>
-<header class='app-header'><div class='brand'><div class='orb'></div><div><h1>JARVIS</h1><div class='small'>Windows voice assistant · v0.5.5</div></div></div><span class='{online_class} badge'>Remote {escape(tunnel.status)}</span></header>
+<header class='app-header'><div class='brand'><div class='orb'></div><div><h1>JARVIS</h1><div class='small'>Windows voice assistant · v0.5.7-test</div></div></div><span class='{online_class} badge'>Remote {escape(tunnel.status)}</span></header>
 <main class='dashboard'>
 
 <section class='card hero'><h2>Assistant</h2>
@@ -129,7 +154,7 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 <div class='compose'><input id='homeMessage' placeholder='Send a message to paired devices'><button type='button' onclick='sendHomeMessage()'>Send</button></div>
 <div id='homeInbox'>No messages yet.</div></section>
 
-<details class='advanced'><summary>Connections, updates, accounts, and device settings</summary><div class='settings-grid'>
+<details class='advanced' open><summary>Connections, updates, accounts, and device settings</summary><div class='settings-grid'>
 <div class='card'><h2>Private updates</h2>
 <span id='updateBadge' class='warn badge'>Idle</span><p id='updateDetail' class='small'></p>
 <button type='button' onclick='checkUpdates()'>Check private builds</button>
@@ -138,13 +163,12 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 <p class='small'>JARVIS checks private Windows builds every five minutes and automatically closes, updates, and reopens when a newer build is ready. Android receives its APK through the paired host and shows the protected installer confirmation.</p></div>
 
 <div class='card full'><h2>Connection routes</h2>
+<p class='small'>Only routes a paired phone can actually use are shown here.</p>
 <div class='route-grid'>
-<div class='route-label'>Local gateway</div><div class='route-value'><code class='url'>{escape(local_gateway)}</code></div>
-<div class='route-label'>LAN / same Wi-Fi</div><div class='route-value'><code class='url'>{escape(lan_gateway)}</code></div>
-<div class='route-label'>Remote / internet</div><div class='route-value'><code id='remoteUrl' class='url'>{escape(remote_url)}</code></div>
-<div class='route-label'>Admin dashboard</div><div class='route-value'><code class='url'>{escape(admin_url)}</code></div>
+<div class='route-label'>LAN / same Wi-Fi</div><div class='route-value'><span class='online badge'>LOCAL</span> <code class='url'>{escape(lan_gateway)}</code></div>
+<div class='route-label'>Remote / internet</div><div class='route-value'><span class='{online_class} badge'>REMOTE {escape(tunnel.status.upper())}</span> <code id='remoteUrl' class='url'>{escape(remote_url)}</code></div>
 </div>
-<p class='small'>Paired phones remember both routes and switch automatically between local Wi-Fi and the remote connection. The admin dashboard stays local to this PC.</p>
+<p class='small'>Internal loopback services (127.0.0.1) stay hidden because Android cannot use them. Quick Tunnel replacements overwrite the previous remote route instead of creating another connection.</p>
 </div>
 
 <div class='card'><h2>Remote connection</h2><span id='tunnelBadge' class='{online_class} badge'>Tunnel: {escape(tunnel.status)}</span><p id='tunnelError' class='error'>{escape(tunnel.last_error)}</p>
@@ -153,18 +177,11 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 <input id='tunnelToken' class='assistant' type='password' placeholder='Cloudflare tunnel token (eyJ...)' autocomplete='off'>
 <button type='button' onclick='saveNamedTunnel()'>Use permanent tunnel</button>
 <button class='secondary' type='button' onclick='clearNamedTunnel()'>Return to temporary tunnel</button>
-
-<form method='get' action='/'>
-<button class='secondary'>Refresh status now</button>
-</form>
-
-<form method='post' action='/tunnel/restart'>
-<button>Restart remote tunnel</button>
-</form>
-
-<p class='small'>Create the tunnel and public hostname in Cloudflare first. Route the hostname to <code>http://127.0.0.1:8765</code>, then paste its token and HTTPS hostname here. The token is protected by Windows Credential Manager.</p></div>
+<form method='get' action='/'><button class='secondary'>Refresh status now</button></form>
+<form method='post' action='/tunnel/restart'><button>Restart remote tunnel</button></form>
+<p class='small'>The tunnel proxies only the secure JARVIS gateway on port 8765. The admin dashboard remains localhost-only.</p></div>
 <div class='card'><h2>Pair a device</h2><p class='small'>This code can be used exactly once and expires after five minutes.</p><div class='code'>{escape(current_pairing_code or '—')}</div><form method='post' action='/pairing/new'><button>Generate new pairing code</button></form></div>
-<div class='card full'><h2>Devices & permissions</h2><table><tr><th>Device</th><th>Status</th><th>JARVIS capabilities</th><th>Security</th></tr>{''.join(rows) or '<tr><td colspan=4>No devices paired yet.</td></tr>'}</table></div>
+<div class='card full'><h2>Devices & permissions</h2><p class='small'>CONNECTED NOW means the device has authenticated or used JARVIS in the last 45 seconds. Revoke blocks its key; Forget permanently removes an obsolete test pairing.</p><table><tr><th>Device</th><th>Status</th><th>JARVIS capabilities</th><th>Security</th></tr>{''.join(rows) or '<tr><td colspan=4>No devices paired yet.</td></tr>'}</table></div>
 <div class='card'><h2>Security</h2><span class='badge'>ECDSA P-256 device authentication enabled</span><p class='small'>Only port 8765 is proxied through the remote tunnel. This admin dashboard remains bound to 127.0.0.1:8766 and is never published.</p></div>
 </div></details></main>
 <script>
@@ -314,7 +331,6 @@ def save_named_tunnel(request: TunnelConfigRequest):
         return tunnel.snapshot()
     except Exception as exc:
         from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -353,7 +369,6 @@ def save_ai_key(request: ApiKeyRequest):
         return {"configured": True}
     except Exception as exc:
         from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -369,7 +384,6 @@ def assistant(request: AssistantRequest):
         return respond(request.message)
     except Exception as exc:
         from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -379,7 +393,6 @@ def voice_listen():
         return {"transcript": windows_voice.listen()}
     except Exception as exc:
         from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -390,7 +403,6 @@ def voice_speak(request: VoiceRequest):
         return {"spoken": True}
     except Exception as exc:
         from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -430,12 +442,10 @@ def apply_windows_update():
         updater.stage_windows_restart()
         import os
         import threading
-
         threading.Timer(1.0, lambda: os._exit(0)).start()
         return {"restarting": True}
     except Exception as exc:
         from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -450,7 +460,6 @@ def rename_device(device_id: str, name: str = Form(...)):
     clean = name.strip()
     if not clean or len(clean) > 50:
         from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail="Device name must be 1 to 50 characters")
     store.rename_device(device_id, clean)
     return RedirectResponse(url="/", status_code=303)
@@ -461,7 +470,6 @@ def rename_home(name: str = Form(...)):
     clean = name.strip()
     if not clean or len(clean) > 50:
         from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail="Home name must be 1 to 50 characters")
     store.set_home_name(clean)
     return RedirectResponse(url="/", status_code=303)
@@ -470,4 +478,10 @@ def rename_home(name: str = Form(...)):
 @admin_app.post("/devices/{device_id}/revoke")
 def revoke(device_id: str):
     store.revoke_device(device_id)
+    return RedirectResponse(url="/", status_code=303)
+
+
+@admin_app.post("/devices/{device_id}/delete")
+def delete_device(device_id: str):
+    store.delete_device(device_id)
     return RedirectResponse(url="/", status_code=303)
