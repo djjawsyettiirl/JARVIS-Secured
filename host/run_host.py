@@ -10,6 +10,9 @@ from jarvis_host.admin import admin_app
 import jarvis_host.admin as admin
 from jarvis_host import tunnel
 from jarvis_host.updater import updater
+from jarvis_host import route_rendezvous
+
+app.include_router(route_rendezvous.router)
 
 
 def _start_tunnel_when_gateway_is_ready() -> None:
@@ -22,6 +25,23 @@ def _start_tunnel_when_gateway_is_ready() -> None:
             tunnel.status = "error"
             tunnel.last_error = str(exc)
         time.sleep(15)
+
+
+def _route_handoff_loop() -> None:
+    # A Quick Tunnel URL changes whenever Cloudflare starts a fresh tunnel.
+    # Publish the replacement through an independent rendezvous channel so a
+    # paired phone can recover even when its saved tunnel URL is already dead.
+    last_seen = ""
+    while True:
+        try:
+            current = (tunnel.public_url or "").strip().rstrip("/")
+            if current.startswith("https://") and current != last_seen:
+                route_rendezvous.publish_if_changed()
+                last_seen = current
+        except Exception:
+            # Route handoff is a recovery aid. It must never stop the host.
+            pass
+        time.sleep(2)
 
 
 def _automatic_update_loop() -> None:
@@ -53,6 +73,7 @@ def main() -> None:
     )
     threading.Thread(target=admin_server.run, daemon=True).start()
     threading.Thread(target=_start_tunnel_when_gateway_is_ready, daemon=True).start()
+    threading.Thread(target=_route_handoff_loop, daemon=True).start()
     threading.Thread(target=_automatic_update_loop, daemon=True).start()
 
     gateway_server = uvicorn.Server(
