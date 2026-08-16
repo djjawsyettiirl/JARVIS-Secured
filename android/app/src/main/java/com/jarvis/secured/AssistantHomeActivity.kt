@@ -72,12 +72,19 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (stroke != null) setStroke(dp(1), Color.parseColor(stroke))
     }
 
+    private fun errorDetail(raw: String, fallback: String): String {
+        if (raw.isBlank()) return fallback
+        return runCatching { JSONObject(raw).optString("detail").takeIf { it.isNotBlank() } }.getOrNull()
+            ?: raw.trim().trim('"').take(240).ifBlank { fallback }
+    }
+
     private fun buildUi() {
         val primary = Color.parseColor("#F4F7FB")
         val muted = Color.parseColor("#8B96A7")
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(52))
+            // Leave room for Android's status bar at the top and keep the composer raised at the bottom.
+            setPadding(dp(18), dp(36), dp(18), dp(52))
             setBackgroundColor(Color.parseColor("#05070A"))
         }
 
@@ -213,9 +220,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         composer.hint = if (targetHome) "Message Home…" else "Ask Jarvis anything…"
     }
 
-    private fun hideGreeting() {
-        if (greeting.visibility != View.GONE) greeting.visibility = View.GONE
-    }
+    private fun hideGreeting() { if (greeting.visibility != View.GONE) greeting.visibility = View.GONE }
 
     private fun addMessage(sender: String, body: String, mine: Boolean = false, system: Boolean = false) {
         hideGreeting()
@@ -224,30 +229,20 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             gravity = if (mine) Gravity.END else Gravity.START
             setPadding(0, dp(3), 0, dp(7))
         }
-        val label = TextView(this).apply {
+        wrapper.addView(TextView(this).apply {
             text = sender
             textSize = 11.5f
             setTextColor(Color.parseColor("#778395"))
             setPadding(dp(8), 0, dp(8), dp(3))
-        }
-        val bubble = TextView(this).apply {
+        })
+        wrapper.addView(TextView(this).apply {
             text = body
             textSize = 16f
             setTextColor(Color.parseColor("#F4F7FB"))
             setPadding(dp(15), dp(11), dp(15), dp(11))
-            background = rounded(
-                when {
-                    system -> "#171C23"
-                    mine -> "#234F9B"
-                    else -> "#12171E"
-                },
-                18,
-                if (mine) null else "#242C36"
-            )
+            background = rounded(if (system) "#171C23" else if (mine) "#234F9B" else "#12171E", 18, if (mine) null else "#242C36")
             maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
-        }
-        wrapper.addView(label)
-        wrapper.addView(bubble)
+        })
         conversation.addView(wrapper, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         conversationScroll.post { conversationScroll.fullScroll(View.FOCUS_DOWN) }
     }
@@ -261,15 +256,24 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 try {
                     val challengeReq = Request.Builder().url("$route/auth/challenge?device_id=$deviceId").post("".toRequestBody(null)).build()
                     val challenge = http.newCall(challengeReq).execute().use { r ->
-                        val body = r.body?.string() ?: "{}"; if (!r.isSuccessful) error(JSONObject(body).optString("detail", "challenge failed")); JSONObject(body).getString("challenge")
+                        val body = r.body?.string() ?: "{}"
+                        if (!r.isSuccessful) error(errorDetail(body, "challenge failed"))
+                        JSONObject(body).getString("challenge")
                     }
                     val payload = JSONObject().put("device_id", deviceId).put("signature_b64", sign(challenge))
                     val authReq = Request.Builder().url("$route/auth/verify").post(payload.toString().toRequestBody(jsonType)).build()
-                    val obj = http.newCall(authReq).execute().use { r -> val body = r.body?.string() ?: "{}"; if (!r.isSuccessful) error(JSONObject(body).optString("detail", "authentication failed")); JSONObject(body) }
+                    val obj = http.newCall(authReq).execute().use { r ->
+                        val body = r.body?.string() ?: "{}"
+                        if (!r.isSuccessful) error(errorDetail(body, "authentication failed"))
+                        JSONObject(body)
+                    }
                     sessionToken = obj.getString("session_token")
                     activeRoute = route
                     getSharedPreferences("jarvis", MODE_PRIVATE).edit().putString("active_host", route).apply()
-                    runOnUiThread { connection.text = "● Connected via ${if (route.startsWith("https://")) "remote" else "local"}"; connection.setTextColor(Color.parseColor("#79AEFF")) }
+                    runOnUiThread {
+                        connection.text = "● Connected via ${if (route.startsWith("https://")) "remote" else "local"}"
+                        connection.setTextColor(Color.parseColor("#79AEFF"))
+                    }
                     startPolling()
                     return@Thread
                 } catch (e: Exception) { last = e }
@@ -300,7 +304,11 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             try {
                 val req = Request.Builder().url("$route/assistant").header("Authorization", "Bearer $token")
                     .post(JSONObject().put("message", text).toString().toRequestBody(jsonType)).build()
-                val obj = http.newCall(req).execute().use { r -> val body = r.body?.string() ?: "{}"; if (!r.isSuccessful) error(JSONObject(body).optString("detail", "request failed")); JSONObject(body) }
+                val obj = http.newCall(req).execute().use { r ->
+                    val body = r.body?.string() ?: "{}"
+                    if (!r.isSuccessful) error(errorDetail(body, "request failed"))
+                    JSONObject(body)
+                }
                 val reply = obj.optString("reply", "No reply yet.")
                 runOnUiThread {
                     addMessage("Jarvis", reply)
@@ -316,16 +324,19 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             try {
                 val req = Request.Builder().url("$route/messages").header("Authorization", "Bearer $token")
                     .post(JSONObject().put("body", text).toString().toRequestBody(jsonType)).build()
-                http.newCall(req).execute().use { r -> if (!r.isSuccessful) error(JSONObject(r.body?.string() ?: "{}").optString("detail", "message failed")) }
-            } catch (e: Exception) { runOnUiThread { addMessage("Assistant Jarvis", "Message failed: ${e.message}", system = true) } }
+                http.newCall(req).execute().use { r ->
+                    val raw = r.body?.string().orEmpty()
+                    if (!r.isSuccessful) error("HTTP ${r.code}: ${errorDetail(raw, "message failed")}")
+                }
+            } catch (e: Exception) {
+                runOnUiThread { addMessage("Assistant Jarvis", "Message failed: ${e.message}", system = true) }
+            }
         }.start()
     }
 
     private fun startPolling() {
         handler.removeCallbacksAndMessages(null)
-        handler.post(object : Runnable {
-            override fun run() { pollMessages(); handler.postDelayed(this, 5000) }
-        })
+        handler.post(object : Runnable { override fun run() { pollMessages(); handler.postDelayed(this, 5000) } })
     }
 
     private fun pollMessages() {
@@ -338,7 +349,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     if (!r.isSuccessful) return@use
                     val arr = org.json.JSONArray(r.body?.string() ?: "[]")
                     for (index in 0 until arr.length()) {
-                        val item = arr.getJSONObject(index)
+                        val item = arr.optJSONObject(index) ?: continue
                         val sender = item.optString("sender_name", "Home")
                         val body = item.optString("body")
                         runOnUiThread {
@@ -347,7 +358,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         }
                     }
                 }
-            } catch (_: IOException) { }
+            } catch (_: Exception) { }
         }.start()
     }
 
