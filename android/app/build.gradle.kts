@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.secured"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.5.7-test"
+        versionCode = 14
+        versionName = "1.0"
     }
 
     signingConfigs {
