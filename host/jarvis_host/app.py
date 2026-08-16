@@ -18,7 +18,7 @@ from .assistant import respond
 from .updater import updater
 from . import tunnel
 
-app = FastAPI(title="JARVIS Secure Host", version="0.5.5")
+app = FastAPI(title="JARVIS Secure Host", version="0.5.7-test")
 store = Store()
 challenges: dict[str, tuple[str, float]] = {}
 sessions: dict[str, tuple[str, float]] = {}
@@ -80,7 +80,7 @@ def _new_session(device_id: str) -> tuple[str, int]:
     return token, ttl
 
 
-def _authenticated_device(authorization: str | None) -> str:
+def _authenticated_device(authorization: str | None, route: str = "") -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authentication required")
     token = authorization.removeprefix("Bearer ").strip()
@@ -93,11 +93,11 @@ def _authenticated_device(authorization: str | None) -> str:
     if not row or row["revoked"]:
         sessions.pop(token, None)
         raise HTTPException(status_code=401, detail="Unknown or revoked device")
+    store.touch_device(device_id, route)
     return device_id
 
 
 def _decode_signature_base64(value: str) -> bytes:
-    """Decode Android signature text while accepting URL-safe or standard Base64."""
     normalized = value.strip()
     normalized += "=" * (-len(normalized) % 4)
     try:
@@ -107,11 +107,6 @@ def _decode_signature_base64(value: str) -> bytes:
 
 
 def _normalize_ecdsa_signature(signature: bytes) -> bytes:
-    """Return ASN.1 DER ECDSA signature bytes.
-
-    Android normally emits DER for SHA256withECDSA, but some providers/devices can
-    expose IEEE-P1363 r||s bytes. cryptography expects DER, so accept both formats.
-    """
     if len(signature) == 64:
         r = int.from_bytes(signature[:32], "big")
         s = int.from_bytes(signature[32:], "big")
@@ -120,11 +115,19 @@ def _normalize_ecdsa_signature(signature: bytes) -> bytes:
 
 
 def _client_ip(request: Request) -> str:
-    # Cloudflare sets this header on tunneled requests. On LAN, fall back to the socket peer.
     cf_ip = request.headers.get("cf-connecting-ip")
     if cf_ip:
         return cf_ip.strip()
     return request.client.host if request.client else "unknown"
+
+
+def _route_kind(request: Request) -> str:
+    if request.headers.get("cf-connecting-ip"):
+        return "remote"
+    host = request.headers.get("host", "")
+    if host.startswith("127.0.0.1") or host.startswith("localhost"):
+        return "local-host"
+    return "lan"
 
 
 def _check_pair_rate_limit(request: Request) -> None:
@@ -139,7 +142,6 @@ def _check_pair_rate_limit(request: Request) -> None:
 
 
 def _connection_routes() -> dict[str, str]:
-    """Return every currently usable gateway without tying identity to an IP."""
     lan = ""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -167,13 +169,9 @@ def pair(request: PairRequest, http_request: Request):
     if not store.consume_pairing(request.code):
         raise HTTPException(status_code=401, detail="Pairing code is invalid, expired, or already used")
     device_id = store.add_device(request.device_name.strip(), request.public_key_pem)
+    store.touch_device(device_id, _route_kind(http_request))
     challenge = _new_challenge(device_id)
-    return PairResponse(
-        device_id=device_id,
-        challenge=challenge,
-        scopes=store.get_scopes(device_id),
-        routes=_connection_routes(),
-    )
+    return PairResponse(device_id=device_id, challenge=challenge, scopes=store.get_scopes(device_id), routes=_connection_routes())
 
 
 @app.post("/auth/challenge", response_model=ChallengeResponse)
@@ -185,7 +183,7 @@ def challenge(device_id: str):
 
 
 @app.post("/auth/verify")
-def verify(request: AuthenticateRequest):
+def verify(request: AuthenticateRequest, http_request: Request):
     row = store.get_device(request.device_id)
     if not row or row["revoked"]:
         raise HTTPException(status_code=401, detail="Unknown or revoked device")
@@ -200,25 +198,28 @@ def verify(request: AuthenticateRequest):
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid device signature") from exc
     token, expires_in = _new_session(request.device_id)
+    route = _route_kind(http_request)
+    store.touch_device(request.device_id, route)
     return {
         "authenticated": True,
         "device_id": request.device_id,
         "scopes": store.get_scopes(request.device_id),
         "session_token": token,
         "expires_in": expires_in,
+        "active_route": route,
         "routes": _connection_routes(),
     }
 
 
 @app.get("/connection/routes")
-def connection_routes(authorization: str | None = Header(default=None)):
-    _authenticated_device(authorization)
-    return _connection_routes()
+def connection_routes(http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    return {**_connection_routes(), "active_route": _route_kind(http_request), "device_id": device_id}
 
 
 @app.post("/assistant")
-def assistant(request: AssistantRequest, authorization: str | None = Header(default=None)):
-    device_id = _authenticated_device(authorization)
+def assistant(request: AssistantRequest, http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
     if "chat" not in store.get_scopes(device_id):
         raise HTTPException(status_code=403, detail="This device does not have the chat capability")
     try:
@@ -228,39 +229,39 @@ def assistant(request: AssistantRequest, authorization: str | None = Header(defa
 
 
 @app.post("/messages")
-def send_message(request: MessageRequest, authorization: str | None = Header(default=None)):
-    device_id = _authenticated_device(authorization)
+def send_message(request: MessageRequest, http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
     if "messaging" not in store.get_scopes(device_id):
         raise HTTPException(status_code=403, detail="This device does not have the messaging capability")
     return {"message_id": store.send_message(device_id, request.body.strip()), "sent": True}
 
 
 @app.get("/messages")
-def messages(authorization: str | None = Header(default=None)):
-    device_id = _authenticated_device(authorization)
+def messages(http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
     if "messaging" not in store.get_scopes(device_id):
         raise HTTPException(status_code=403, detail="This device does not have the messaging capability")
     return store.device_messages(device_id)
 
 
 @app.post("/device/name")
-def rename_current_device(request: DeviceNameRequest, authorization: str | None = Header(default=None)):
-    device_id = _authenticated_device(authorization)
+def rename_current_device(request: DeviceNameRequest, http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
     store.rename_device(device_id, request.name.strip())
     return {"renamed": True, "name": request.name.strip()}
 
 
 @app.get("/updates/android/status")
-def android_update_status(authorization: str | None = Header(default=None)):
-    device_id = _authenticated_device(authorization)
+def android_update_status(http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
     if "software_updates" not in store.get_scopes(device_id):
         raise HTTPException(status_code=403, detail="This device does not have the software_updates capability")
     return {"available": updater.status == "ready" and updater.android_apk.is_file()}
 
 
 @app.get("/updates/android")
-def android_update(authorization: str | None = Header(default=None)):
-    device_id = _authenticated_device(authorization)
+def android_update(http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
     if "software_updates" not in store.get_scopes(device_id):
         raise HTTPException(status_code=403, detail="This device does not have the software_updates capability")
     if updater.status != "ready":
@@ -268,7 +269,3 @@ def android_update(authorization: str | None = Header(default=None)):
     if not updater.android_apk.is_file():
         raise HTTPException(status_code=404, detail="No Android update is staged on the home host")
     return FileResponse(updater.android_apk, media_type="application/vnd.android.package-archive", filename="JARVIS-update.apk")
-
-# IMPORTANT: device administration routes intentionally live only on the
-# separate localhost-bound admin app (port 8766). The public gateway exposes
-# only health, pairing, challenge, and verification endpoints.
