@@ -14,7 +14,9 @@ import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.util.Base64
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -37,9 +39,11 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val http = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
     private val jsonType = "application/json".toMediaType()
     private lateinit var composer: EditText
-    private lateinit var transcript: TextView
     private lateinit var connection: TextView
     private lateinit var targetButton: Button
+    private lateinit var conversation: LinearLayout
+    private lateinit var conversationScroll: ScrollView
+    private lateinit var greeting: LinearLayout
     private var targetHome = false
     private var sessionToken: String? = null
     private var activeRoute: String? = null
@@ -62,88 +66,191 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             .map(::normalized).filter { it.startsWith("http://") || it.startsWith("https://") }.distinct()
     }
 
+    private fun rounded(fill: String, radius: Int, stroke: String? = null): GradientDrawable = GradientDrawable().apply {
+        setColor(Color.parseColor(fill))
+        cornerRadius = dp(radius).toFloat()
+        if (stroke != null) setStroke(dp(1), Color.parseColor(stroke))
+    }
+
     private fun buildUi() {
         val primary = Color.parseColor("#F4F7FB")
-        val muted = Color.parseColor("#94A3B8")
+        val muted = Color.parseColor("#8B96A7")
+        val blue = Color.parseColor("#79AEFF")
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(22), dp(20), dp(18))
-            setBackgroundColor(Color.parseColor("#07090D"))
+            setPadding(dp(18), dp(18), dp(18), dp(12))
+            setBackgroundColor(Color.parseColor("#05070A"))
         }
-        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        top.addView(TextView(this).apply {
+
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), 0, dp(2), dp(6))
+        }
+        val brandBlock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        brandBlock.addView(TextView(this).apply {
             text = "Assistant Jarvis"
-            textSize = 20f
+            textSize = 21f
             setTextColor(primary)
             setTypeface(typeface, Typeface.BOLD)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        })
+        connection = TextView(this).apply {
+            text = "Connecting…"
+            textSize = 12.5f
+            setTextColor(muted)
+            setPadding(0, dp(2), 0, 0)
+        }
+        brandBlock.addView(connection)
+        top.addView(brandBlock, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         top.addView(Button(this).apply {
             text = "⚙"
+            textSize = 20f
             isAllCaps = false
+            minWidth = dp(50)
+            minHeight = dp(46)
+            background = rounded("#151A22", 18, "#252C37")
+            setTextColor(primary)
             setOnClickListener { startActivity(Intent(this@AssistantHomeActivity, MainActivity::class.java)) }
         })
         root.addView(top)
 
-        connection = TextView(this).apply { text = "Connecting…"; textSize = 13f; setTextColor(muted) }
-        root.addView(connection)
-
-        val center = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(0, dp(90), 0, dp(30)) }
-        center.addView(TextView(this).apply {
+        greeting = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(34), dp(12), dp(24))
+        }
+        greeting.addView(TextView(this).apply {
             text = "What can I do for you?"
             textSize = 30f
             setTextColor(primary)
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
         })
-        center.addView(TextView(this).apply {
-            text = "Ask Jarvis or switch the same message bar to Home messaging."
+        greeting.addView(TextView(this).apply {
+            text = "Ask Jarvis or message Home from the same bar."
             textSize = 14f
             setTextColor(muted)
             gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, dp(20))
+            setPadding(0, dp(8), 0, 0)
         })
-        transcript = TextView(this).apply {
-            text = "Ready."
-            textSize = 16f
-            setTextColor(primary)
-            setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = GradientDrawable().apply { setColor(Color.parseColor("#11151B")); cornerRadius = dp(18).toFloat() }
+        root.addView(greeting)
+
+        conversation = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.BOTTOM
+            setPadding(0, dp(4), 0, dp(10))
         }
-        center.addView(transcript, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        root.addView(center, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        conversationScroll = ScrollView(this).apply {
+            isFillViewport = true
+            clipToPadding = false
+            addView(conversation, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        root.addView(conversationScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(6), dp(8), dp(6))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#171B22")); setStroke(dp(1), Color.parseColor("#303641")); cornerRadius = dp(28).toFloat()
-            }
+            setPadding(dp(7), dp(6), dp(7), dp(6))
+            background = rounded("#14181E", 30, "#2A313B")
         }
         targetButton = Button(this).apply {
             text = "Jarvis"
+            textSize = 13f
             isAllCaps = false
+            minHeight = dp(46)
+            minWidth = dp(70)
+            setTextColor(primary)
+            background = rounded("#222936", 22)
             setOnClickListener { targetHome = !targetHome; updateTarget() }
         }
         bar.addView(targetButton)
         composer = EditText(this).apply {
-            hint = "Ask anything"
+            hint = "Ask Jarvis anything…"
+            textSize = 16f
             setTextColor(primary)
-            setHintTextColor(Color.parseColor("#6F7885"))
+            setHintTextColor(Color.parseColor("#697382"))
             background = null
+            setPadding(dp(12), dp(8), dp(8), dp(8))
             maxLines = 4
+            minHeight = dp(48)
+            imeOptions = EditorInfo.IME_ACTION_SEND
+            setSingleLine(false)
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_SEND) { sendCurrent(); true } else false
+            }
         }
         bar.addView(composer, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        bar.addView(Button(this).apply { text = "🎙"; setOnClickListener { startVoice() } })
-        bar.addView(Button(this).apply { text = "➤"; setOnClickListener { sendCurrent() } })
+        bar.addView(Button(this).apply {
+            text = "🎙"
+            textSize = 18f
+            minWidth = dp(48)
+            minHeight = dp(48)
+            setTextColor(primary)
+            background = rounded("#222936", 24)
+            setOnClickListener { startVoice() }
+        }, LinearLayout.LayoutParams(dp(50), dp(50)).apply { marginStart = dp(4) })
+        bar.addView(Button(this).apply {
+            text = "➤"
+            textSize = 18f
+            minWidth = dp(48)
+            minHeight = dp(48)
+            setTextColor(Color.WHITE)
+            background = rounded("#3269D8", 24)
+            setOnClickListener { sendCurrent() }
+        }, LinearLayout.LayoutParams(dp(50), dp(50)).apply { marginStart = dp(6) })
         root.addView(bar)
-        root.addView(TextView(this).apply { text = "Assistant Jarvis · V 1.0"; textSize = 11f; setTextColor(muted); gravity = Gravity.CENTER; setPadding(0, dp(10), 0, 0) })
+        root.addView(TextView(this).apply {
+            text = "Assistant Jarvis · V 1.0"
+            textSize = 10.5f
+            setTextColor(Color.parseColor("#596271"))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(7), 0, 0)
+        })
         setContentView(root)
     }
 
     private fun updateTarget() {
         targetButton.text = if (targetHome) "Home" else "Jarvis"
         composer.hint = if (targetHome) "Message Home…" else "Ask Jarvis anything…"
+    }
+
+    private fun hideGreeting() {
+        if (greeting.visibility != View.GONE) greeting.visibility = View.GONE
+    }
+
+    private fun addMessage(sender: String, body: String, mine: Boolean = false, system: Boolean = false) {
+        hideGreeting()
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = if (mine) Gravity.END else Gravity.START
+            setPadding(0, dp(3), 0, dp(7))
+        }
+        val label = TextView(this).apply {
+            text = sender
+            textSize = 11.5f
+            setTextColor(Color.parseColor("#778395"))
+            setPadding(dp(8), 0, dp(8), dp(3))
+        }
+        val bubble = TextView(this).apply {
+            text = body
+            textSize = 16f
+            setTextColor(Color.parseColor("#F4F7FB"))
+            setPadding(dp(15), dp(11), dp(15), dp(11))
+            background = rounded(
+                when {
+                    system -> "#171C23"
+                    mine -> "#234F9B"
+                    else -> "#12171E"
+                },
+                18,
+                if (mine) null else "#242C36"
+            )
+            maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
+        }
+        wrapper.addView(label)
+        wrapper.addView(bubble)
+        conversation.addView(wrapper, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        conversationScroll.post { conversationScroll.fullScroll(View.FOCUS_DOWN) }
     }
 
     private fun reconnect() {
@@ -163,12 +270,12 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     sessionToken = obj.getString("session_token")
                     activeRoute = route
                     getSharedPreferences("jarvis", MODE_PRIVATE).edit().putString("active_host", route).apply()
-                    runOnUiThread { connection.text = "● Connected via ${if (route.startsWith("https://")) "remote" else "local"}" }
+                    runOnUiThread { connection.text = "● Connected via ${if (route.startsWith("https://")) "remote" else "local"}"; connection.setTextColor(Color.parseColor("#79AEFF")) }
                     startPolling()
                     return@Thread
                 } catch (e: Exception) { last = e }
             }
-            runOnUiThread { connection.text = "Offline · ${last?.message ?: "no saved route"}" }
+            runOnUiThread { connection.text = "Offline · ${last?.message ?: "no saved route"}"; connection.setTextColor(Color.parseColor("#D98B93")) }
         }.start()
     }
 
@@ -182,14 +289,14 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun sendCurrent() {
         val text = composer.text.toString().trim(); if (text.isEmpty()) return
-        val token = sessionToken ?: run { transcript.text = "Reconnecting…"; reconnect(); return }
+        val token = sessionToken ?: run { addMessage("Assistant Jarvis", "Reconnecting…", system = true); reconnect(); return }
         val route = activeRoute ?: return
         composer.text.clear()
+        addMessage(if (targetHome) "You → Home" else "You", text, mine = true)
         if (targetHome) sendHome(route, token, text) else ask(route, token, text)
     }
 
     private fun ask(route: String, token: String, text: String) {
-        transcript.text = "Thinking…"
         Thread {
             try {
                 val req = Request.Builder().url("$route/assistant").header("Authorization", "Bearer $token")
@@ -197,11 +304,11 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val obj = http.newCall(req).execute().use { r -> val body = r.body?.string() ?: "{}"; if (!r.isSuccessful) error(JSONObject(body).optString("detail", "request failed")); JSONObject(body) }
                 val reply = obj.optString("reply", "No reply yet.")
                 runOnUiThread {
-                    transcript.text = reply
+                    addMessage("Jarvis", reply)
                     tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "assistant-reply")
                     obj.optJSONObject("action")?.takeIf { it.optString("type") == "open_url" }?.let { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it.getString("url")))) }
                 }
-            } catch (e: Exception) { runOnUiThread { transcript.text = "Jarvis error: ${e.message}" } }
+            } catch (e: Exception) { runOnUiThread { addMessage("Jarvis", "Error: ${e.message}", system = true) } }
         }.start()
     }
 
@@ -211,8 +318,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val req = Request.Builder().url("$route/messages").header("Authorization", "Bearer $token")
                     .post(JSONObject().put("body", text).toString().toRequestBody(jsonType)).build()
                 http.newCall(req).execute().use { r -> if (!r.isSuccessful) error(JSONObject(r.body?.string() ?: "{}").optString("detail", "message failed")) }
-                runOnUiThread { transcript.text = "You → Home\n$text" }
-            } catch (e: Exception) { runOnUiThread { transcript.text = "Message failed: ${e.message}" } }
+            } catch (e: Exception) { runOnUiThread { addMessage("Assistant Jarvis", "Message failed: ${e.message}", system = true) } }
         }.start()
     }
 
@@ -232,10 +338,14 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     if (r.code == 401) { sessionToken = null; reconnect(); return@use }
                     if (!r.isSuccessful) return@use
                     val arr = org.json.JSONArray(r.body?.string() ?: "[]")
-                    if (arr.length() > 0) {
-                        val item = arr.getJSONObject(arr.length() - 1)
-                        val msg = "${item.optString("sender_name", "Home")}: ${item.optString("body")}" 
-                        runOnUiThread { transcript.text = msg; tts?.speak(msg, TextToSpeech.QUEUE_ADD, null, "home-message") }
+                    for (index in 0 until arr.length()) {
+                        val item = arr.getJSONObject(index)
+                        val sender = item.optString("sender_name", "Home")
+                        val body = item.optString("body")
+                        runOnUiThread {
+                            addMessage(sender, body)
+                            tts?.speak("$sender: $body", TextToSpeech.QUEUE_ADD, null, "home-message-$index")
+                        }
                     }
                 }
             } catch (_: IOException) { }
