@@ -12,7 +12,7 @@
     <application
         android:name=".JarvisApplication"
         android:theme="@style/AppTheme"
-        android:label="JARVIS"
+        android:label="Assistant Jarvis"
         android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:supportsRtl="true">
@@ -24,13 +24,8 @@
         </activity>
         <activity
             android:name=".ConnectionManagerActivity"
-            android:exported="true"
-            android:label="JARVIS Connections">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:exported="false"
+            android:label="Assistant Jarvis Connections" />
         <service
             android:name=".RoutePushService"
             android:exported="false"
