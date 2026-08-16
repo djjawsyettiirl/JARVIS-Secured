@@ -25,8 +25,6 @@ class Store:
         elif os.environ.get("JARVIS_DATA_DIR"):
             self.path = Path(os.environ["JARVIS_DATA_DIR"]) / "jarvis.db"
         elif os.name == "nt":
-            # The portable EXE runs as the signed-in user. LOCALAPPDATA is stable
-            # across restarts and writable without requiring administrator rights.
             local_path = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "JARVIS" / "jarvis.db"
             legacy_path = Path(os.environ.get("PROGRAMDATA", Path.home())) / "JARVIS" / "jarvis.db"
             if not local_path.exists() and legacy_path.exists():
@@ -63,7 +61,9 @@ class Store:
                     public_key_pem TEXT NOT NULL,
                     created_at REAL NOT NULL,
                     revoked INTEGER NOT NULL DEFAULT 0,
-                    scopes_json TEXT NOT NULL DEFAULT '["chat","pc_status","notifications"]'
+                    scopes_json TEXT NOT NULL DEFAULT '["chat","pc_status","notifications"]',
+                    last_seen REAL,
+                    last_route TEXT NOT NULL DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS reminders (
                     reminder_id TEXT PRIMARY KEY,
@@ -93,6 +93,10 @@ class Store:
             cols = {row[1] for row in c.execute("PRAGMA table_info(devices)").fetchall()}
             if "scopes_json" not in cols:
                 c.execute("ALTER TABLE devices ADD COLUMN scopes_json TEXT NOT NULL DEFAULT '[\"chat\",\"pc_status\",\"notifications\"]'")
+            if "last_seen" not in cols:
+                c.execute("ALTER TABLE devices ADD COLUMN last_seen REAL")
+            if "last_route" not in cols:
+                c.execute("ALTER TABLE devices ADD COLUMN last_route TEXT NOT NULL DEFAULT ''")
 
     @staticmethod
     def _hash(code: str, salt: bytes) -> bytes:
@@ -123,10 +127,11 @@ class Store:
 
     def add_device(self, name: str, public_key_pem: str) -> str:
         device_id = secrets.token_urlsafe(18)
+        now = time.time()
         with self._conn() as c:
             c.execute(
-                "INSERT INTO devices(device_id,name,public_key_pem,created_at,scopes_json) VALUES(?,?,?,?,?)",
-                (device_id, name, public_key_pem, time.time(), json.dumps(DEFAULT_SCOPES)),
+                "INSERT INTO devices(device_id,name,public_key_pem,created_at,scopes_json,last_seen) VALUES(?,?,?,?,?,?)",
+                (device_id, name, public_key_pem, now, json.dumps(DEFAULT_SCOPES), now),
             )
         return device_id
 
@@ -149,14 +154,36 @@ class Store:
             c.execute("UPDATE devices SET scopes_json=? WHERE device_id=?", (json.dumps(clean), device_id))
             return c.execute("SELECT changes()").fetchone()[0] == 1
 
+    def touch_device(self, device_id: str, route: str = "") -> bool:
+        with self._conn() as c:
+            c.execute(
+                "UPDATE devices SET last_seen=?, last_route=CASE WHEN ?<>'' THEN ? ELSE last_route END WHERE device_id=?",
+                (time.time(), route, route, device_id),
+            )
+            return c.execute("SELECT changes()").fetchone()[0] == 1
+
     def revoke_device(self, device_id: str) -> bool:
         with self._conn() as c:
             c.execute("UPDATE devices SET revoked=1 WHERE device_id=?", (device_id,))
             return c.execute("SELECT changes()").fetchone()[0] == 1
 
+    def delete_device(self, device_id: str) -> bool:
+        """Permanently forget a device and its queued receipts.
+
+        This is intentionally separate from revoke. Revocation keeps an audit-visible
+        record and blocks the key; delete is for stale/revoked test pairings that the
+        owner explicitly wants removed.
+        """
+        with self._conn() as c:
+            c.execute("DELETE FROM message_receipts WHERE recipient_device_id=?", (device_id,))
+            c.execute("DELETE FROM devices WHERE device_id=?", (device_id,))
+            return c.execute("SELECT changes()").fetchone()[0] == 1
+
     def list_devices(self):
         with self._conn() as c:
-            return c.execute("SELECT device_id,name,created_at,revoked,scopes_json FROM devices ORDER BY created_at DESC").fetchall()
+            return c.execute(
+                "SELECT device_id,name,created_at,revoked,scopes_json,last_seen,last_route FROM devices ORDER BY created_at DESC"
+            ).fetchall()
 
     def rename_device(self, device_id: str, name: str) -> bool:
         with self._conn() as c:
