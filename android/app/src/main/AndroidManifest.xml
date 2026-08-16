@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <application
+        android:name=".JarvisApplication"
         android:theme="@style/AppTheme"
         android:label="JARVIS"
         android:usesCleartextTraffic="true"
