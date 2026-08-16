@@ -75,10 +75,9 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun buildUi() {
         val primary = Color.parseColor("#F4F7FB")
         val muted = Color.parseColor("#8B96A7")
-        val blue = Color.parseColor("#79AEFF")
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(12))
+            setPadding(dp(18), dp(18), dp(18), dp(52))
             setBackgroundColor(Color.parseColor("#05070A"))
         }
 
@@ -200,7 +199,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }, LinearLayout.LayoutParams(dp(50), dp(50)).apply { marginStart = dp(6) })
         root.addView(bar)
         root.addView(TextView(this).apply {
-            text = "Assistant Jarvis · V 1.0"
+            text = "Assistant Jarvis · V 1.1"
             textSize = 10.5f
             setTextColor(Color.parseColor("#596271"))
             gravity = Gravity.CENTER
