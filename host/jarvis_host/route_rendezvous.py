@@ -98,16 +98,17 @@ def publish_if_changed(force: bool = False) -> bool:
     previous = keyring.get_password(KEYRING_SERVICE, LAST_URL_USER) or ""
     if not force and previous == remote_url:
         return False
+
+    # Do not mark a route as delivered until every active paired device has had
+    # its signed update accepted by the rendezvous service. If the service is
+    # temporarily unavailable, the host loop retries this same generation.
     generation = _generation() + 1
+    active_devices = [device for device in store.list_devices() if not device["revoked"]]
+    for device in active_devices:
+        _publish(str(device["device_id"]), remote_url, generation)
+
     _set_generation(generation)
     keyring.set_password(KEYRING_SERVICE, LAST_URL_USER, remote_url)
-    for device in store.list_devices():
-        if not device["revoked"]:
-            try:
-                _publish(str(device["device_id"]), remote_url, generation)
-            except Exception:
-                # A temporary broker outage must never take JARVIS offline.
-                pass
     return True
 
 
@@ -118,8 +119,10 @@ def publish_current_to_device(device_id: str) -> None:
     generation = _generation()
     if generation <= 0:
         generation = 1
+        _publish(device_id, remote_url, generation)
         _set_generation(generation)
         keyring.set_password(KEYRING_SERVICE, LAST_URL_USER, remote_url)
+        return
     _publish(device_id, remote_url, generation)
 
 
