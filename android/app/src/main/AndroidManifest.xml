@@ -16,16 +16,14 @@
         android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:supportsRtl="true">
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name=".AssistantHomeActivity" android:exported="true" android:label="Assistant Jarvis">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".ConnectionManagerActivity"
-            android:exported="false"
-            android:label="Assistant Jarvis Connections" />
+        <activity android:name=".MainActivity" android:exported="false" android:label="Assistant Jarvis Settings" />
+        <activity android:name=".ConnectionManagerActivity" android:exported="false" android:label="Assistant Jarvis Connections" />
         <service
             android:name=".RoutePushService"
             android:exported="false"
