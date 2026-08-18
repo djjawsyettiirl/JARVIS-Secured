@@ -18,7 +18,7 @@ from .assistant import respond
 from .updater import updater
 from . import tunnel
 
-app = FastAPI(title="JARVIS Secure Host", version="0.5.7-test")
+app = FastAPI(title="Assistant Jarvis Secure Host", version="1.2")
 store = Store()
 challenges: dict[str, tuple[str, float]] = {}
 sessions: dict[str, tuple[str, float]] = {}
@@ -156,7 +156,7 @@ def _connection_routes() -> dict[str, str]:
 
 @app.get("/health")
 def health():
-    return {"status": "online", "service": "jarvis-host", "version": app.version}
+    return {"status": "online", "service": "assistant-jarvis-host", "version": app.version}
 
 
 @app.post("/pair", response_model=PairResponse)
@@ -200,15 +200,7 @@ def verify(request: AuthenticateRequest, http_request: Request):
     token, expires_in = _new_session(request.device_id)
     route = _route_kind(http_request)
     store.touch_device(request.device_id, route)
-    return {
-        "authenticated": True,
-        "device_id": request.device_id,
-        "scopes": store.get_scopes(request.device_id),
-        "session_token": token,
-        "expires_in": expires_in,
-        "active_route": route,
-        "routes": _connection_routes(),
-    }
+    return {"authenticated": True, "device_id": request.device_id, "scopes": store.get_scopes(request.device_id), "session_token": token, "expires_in": expires_in, "active_route": route, "routes": _connection_routes()}
 
 
 @app.get("/connection/routes")
@@ -264,8 +256,6 @@ def android_update(http_request: Request, authorization: str | None = Header(def
     device_id = _authenticated_device(authorization, _route_kind(http_request))
     if "software_updates" not in store.get_scopes(device_id):
         raise HTTPException(status_code=403, detail="This device does not have the software_updates capability")
-    if updater.status != "ready":
-        raise HTTPException(status_code=409, detail="The latest private update has not finished downloading on Windows")
-    if not updater.android_apk.is_file():
-        raise HTTPException(status_code=404, detail="No Android update is staged on the home host")
-    return FileResponse(updater.android_apk, media_type="application/vnd.android.package-archive", filename="JARVIS-update.apk")
+    if updater.status != "ready" or not updater.android_apk.is_file():
+        raise HTTPException(status_code=404, detail="No Android update is ready")
+    return FileResponse(updater.android_apk, media_type="application/vnd.android.package-archive", filename="Assistant-Jarvis-update.apk")
