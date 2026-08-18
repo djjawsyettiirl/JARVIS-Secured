@@ -77,7 +77,7 @@ def main() -> None:
 
     time.sleep(0.8)
     webview.create_window(
-        "Assistant Jarvis · V 1.1",
+        "Assistant Jarvis · V 1.2",
         "http://127.0.0.1:8766/assistant-v1",
         width=1280,
         height=860,
