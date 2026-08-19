@@ -74,6 +74,13 @@ def respond(message: str, allowed_scopes: set[str] | None = None) -> dict[str, o
             return {"reply": "You have no pending alarms.", "action": None}
         summary = "; ".join(datetime.fromtimestamp(item["due_at"]).strftime("%I:%M %p").lstrip("0") for item in pending)
         return {"reply": f"Your pending alarms are set for {summary}.", "action": None}
+    if "near me" in lowered or "nearby" in lowered:
+        _require(allowed_scopes, "maps")
+        url = f"https://www.google.com/maps/search/?api=1&query={quote_plus(text)}"
+        return {
+            "reply": "Opening nearby results in Google Maps.",
+            "action": {"type": "open_url", "url": url},
+        }
     map_prefixes = ("map ", "maps ", "navigate to ", "directions to ", "where is ")
     for prefix in map_prefixes:
         if lowered.startswith(prefix):
