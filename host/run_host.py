@@ -54,6 +54,11 @@ def _automatic_update_loop() -> None:
         time.sleep(300)
 
 
+def _show_main_window(window) -> None:
+    """Make packaged launches visible even when a hidden updater is the ancestor."""
+    window.show()
+
+
 def main() -> None:
     if os.environ.get("JARVIS_SMOKE_TEST") == "1":
         from jarvis_host.windows_voice import windows_voice
@@ -76,7 +81,7 @@ def main() -> None:
     threading.Thread(target=gateway_server.run, daemon=True).start()
 
     time.sleep(0.8)
-    webview.create_window(
+    window = webview.create_window(
         "Assistant Jarvis · V 1.2",
         "http://127.0.0.1:8766/assistant-v1",
         width=1280,
@@ -86,7 +91,7 @@ def main() -> None:
         text_select=True,
     )
     try:
-        webview.start(gui="edgechromium", private_mode=True)
+        webview.start(_show_main_window, (window,), gui="edgechromium", private_mode=True)
     finally:
         tunnel.stop_tunnel()
         admin_server.should_exit = True
