@@ -32,7 +32,7 @@ jobs:
           Expand-Archive -LiteralPath 'system.speech.zip' -DestinationPath 'system-speech-package'
           Copy-Item 'system-speech-package/lib/netstandard2.0/System.Speech.dll' 'host/System.Speech.dll'
       - name: Build Windows host executable
-        run: pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS --paths host --collect-all uvicorn --collect-all fastapi --collect-all cryptography --hidden-import cryptography.hazmat.bindings._rust --collect-all googleapiclient --collect-all google_auth_oauthlib --collect-all keyring --collect-all openai --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr --add-binary "host/cloudflared.exe;." --add-binary "host/System.Speech.dll;." --add-data "host/build-info.json;." host/run_host.py
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS --paths host --collect-all uvicorn --collect-all fastapi --collect-all cryptography --hidden-import cryptography.hazmat.bindings._rust --collect-all googleapiclient --collect-all google_auth_oauthlib --collect-all keyring --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr --add-binary "host/cloudflared.exe;." --add-binary "host/System.Speech.dll;." --add-data "host/build-info.json;." host/run_host.py
       - name: Build companion updater
         run: pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS-Updater host/run_updater.py
       - name: Smoke test packaged executable

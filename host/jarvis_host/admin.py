@@ -13,7 +13,7 @@ from . import tunnel
 from .assistant import respond, store as assistant_store
 from .google_account import google_account
 from .updater import updater
-from .online_assistant import online_assistant, MODEL as AI_MODEL
+from .online_assistant import online_assistant
 from .windows_voice import windows_voice
 
 admin_app = FastAPI(title="JARVIS Host Control Panel", version="0.5.7-test")
@@ -25,8 +25,8 @@ class AssistantRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
 
 
-class ApiKeyRequest(BaseModel):
-    api_key: str = Field(min_length=20, max_length=300)
+class SearxngRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=2048)
 
 
 class VoiceRequest(AssistantRequest):
@@ -133,13 +133,13 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 <button id='voiceButton' class='secondary' type='button' onclick='startVoice()'>🎙 Speak</button>
 <p id='assistantReply'>Ready.</p></section>
 
-<div class='card'><h2>Internet intelligence</h2>
-<span id='aiBadge' class='warn badge'>Checking…</span>
-<p class='small'>Enables live internet search, current answers, and recommendations inside JARVIS. The key is stored in Windows Credential Manager and is never sent to paired devices.</p>
-<input id='openaiKey' class='assistant' type='password' placeholder='OpenAI API key' autocomplete='new-password'>
-<button type='button' onclick='saveAiKey()'>Enable internet intelligence</button>
-<button class='danger' type='button' onclick='removeAiKey()'>Remove key</button>
-<p id='aiDetail' class='small'></p></div>
+<div class='card'><h2>SearXNG internet search</h2>
+<span id='searchBadge' class='warn badge'>Checking…</span>
+<p class='small'>JARVIS uses only your private SearXNG server for internet searches. No Brave or OpenAI search key is used.</p>
+<input id='searxngUrl' class='assistant' type='url' placeholder='http://127.0.0.1:8080' autocomplete='url'>
+<button type='button' onclick='saveSearxng()'>Save and test SearXNG</button>
+<button class='danger' type='button' onclick='removeSearxng()'>Use local default</button>
+<p id='searchDetail' class='small'></p></div>
 
 <div class='card'><h2>Google account</h2>
 <span id='googleBadge' class='warn badge'>Checking…</span>
@@ -222,11 +222,11 @@ async function googleStatus() {{
 }}
 async function connectGoogle() {{ await fetch('/google/connect', {{method:'POST'}}); googleStatus(); }}
 async function disconnectGoogle() {{ await fetch('/google/disconnect', {{method:'POST'}}); googleStatus(); }}
-async function aiStatus() {{
-  try {{ const data = await (await fetch('/ai/status')).json(); const badge = document.getElementById('aiBadge'); badge.textContent = data.configured ? 'Online search ready' : 'Setup required'; badge.className = (data.configured ? 'online' : 'warn') + ' badge'; document.getElementById('aiDetail').textContent = data.configured ? 'Model: ' + data.model : 'Add an API key to enable live search and recommendations.'; }} catch (_) {{}}
+async function searchStatus() {{
+  try {{ const data = await (await fetch('/search/status')).json(); const badge = document.getElementById('searchBadge'); badge.textContent = data.connected ? 'SearXNG connected' : 'SearXNG offline'; badge.className = (data.connected ? 'online' : 'warn') + ' badge'; document.getElementById('searchDetail').textContent = data.connected ? 'Connected to ' + data.url : (data.error || 'Start SearXNG, then save its URL here.'); }} catch (_) {{}}
 }}
-async function saveAiKey() {{ const input = document.getElementById('openaiKey'); const response = await fetch('/ai/key', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{api_key:input.value}})}}); const data = await response.json(); if (!response.ok) alert(data.detail || 'Could not save key'); else input.value=''; aiStatus(); }}
-async function removeAiKey() {{ await fetch('/ai/key', {{method:'DELETE'}}); aiStatus(); }}
+async function saveSearxng() {{ const input = document.getElementById('searxngUrl'); const response = await fetch('/search/searxng', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{url:input.value}})}}); const data = await response.json(); if (!response.ok) alert(data.detail || 'Could not save SearXNG'); searchStatus(); }}
+async function removeSearxng() {{ await fetch('/search/searxng', {{method:'DELETE'}}); document.getElementById('searxngUrl').value=''; searchStatus(); }}
 async function tunnelStatus() {{
   try {{
     const data = await (await fetch('/tunnel/status')).json();
@@ -300,7 +300,7 @@ async function applyWindowsUpdate() {{
   const response = await fetch('/updates/apply-windows', {{method:'POST'}});
   if (!response.ok) {{ const data = await response.json(); alert(data.detail || 'Update failed'); }}
 }}
-googleStatus(); aiStatus(); tunnelStatus(); homeInbox(); updateStatus(); setInterval(googleStatus, 3000); setInterval(aiStatus, 5000); setInterval(tunnelStatus, 2000); setInterval(homeInbox, 2000); setInterval(updateStatus, 2000); setInterval(checkAlarms, 1000);
+googleStatus(); searchStatus(); tunnelStatus(); homeInbox(); updateStatus(); setInterval(googleStatus, 3000); setInterval(searchStatus, 10000); setInterval(tunnelStatus, 2000); setInterval(homeInbox, 2000); setInterval(updateStatus, 2000); setInterval(checkAlarms, 1000);
 </script>
 </body></html>"""
 
@@ -357,25 +357,25 @@ def google_disconnect():
     return {"disconnected": True}
 
 
-@admin_app.get("/ai/status")
-def ai_status():
-    return {"configured": online_assistant.configured(), "model": AI_MODEL}
+@admin_app.get("/search/status")
+def search_status():
+    return online_assistant.connection_status()
 
 
-@admin_app.post("/ai/key")
-def save_ai_key(request: ApiKeyRequest):
+@admin_app.post("/search/searxng")
+def save_searxng(request: SearxngRequest):
     try:
-        online_assistant.save_key(request.api_key)
-        return {"configured": True}
+        online_assistant.save_searxng_url(request.url)
+        return online_assistant.connection_status()
     except Exception as exc:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@admin_app.delete("/ai/key")
-def remove_ai_key():
-    online_assistant.remove_key()
-    return {"configured": False}
+@admin_app.delete("/search/searxng")
+def remove_searxng():
+    online_assistant.remove_searxng_url()
+    return online_assistant.connection_status()
 
 
 @admin_app.post("/assistant")
