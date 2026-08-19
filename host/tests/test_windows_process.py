@@ -19,12 +19,3 @@ def test_hidden_process_options_on_windows(monkeypatch):
     assert options["creationflags"] == 0x08000008
     assert options["startupinfo"].dwFlags & 1
     assert options["startupinfo"].wShowWindow == 0
-
-
-def test_detached_windowed_app_is_not_hidden(monkeypatch):
-    monkeypatch.setattr(windows_process.os, "name", "nt")
-    monkeypatch.setattr(windows_process.subprocess, "DETACHED_PROCESS", 0x00000008, raising=False)
-
-    options = windows_process.detached_process_kwargs()
-
-    assert options == {"creationflags": 0x00000008}

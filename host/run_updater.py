@@ -8,7 +8,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from windows_process import detached_process_kwargs, hidden_process_kwargs
+from windows_process import hidden_process_kwargs
 
 
 def _sha256(path: Path) -> str:
@@ -50,14 +50,7 @@ def apply_update(current: Path, replacement: Path, expected_sha256: str) -> None
 
     if _sha256(current) != expected_sha256.lower():
         raise RuntimeError("The installed JARVIS update failed verification")
-    subprocess.Popen(
-        [str(current)],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        close_fds=True,
-        **detached_process_kwargs(),
-    )
+    os.startfile(str(current))
 
 
 def main() -> None:
