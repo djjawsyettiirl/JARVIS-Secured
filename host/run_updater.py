@@ -8,7 +8,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from windows_process import hidden_process_kwargs
+from windows_process import detached_process_kwargs, hidden_process_kwargs
 
 
 def _sha256(path: Path) -> str:
@@ -56,7 +56,7 @@ def apply_update(current: Path, replacement: Path, expected_sha256: str) -> None
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         close_fds=True,
-        **hidden_process_kwargs(detached=True),
+        **detached_process_kwargs(),
     )
 
 
