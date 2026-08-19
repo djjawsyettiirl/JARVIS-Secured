@@ -22,6 +22,6 @@ def test_companion_force_closes_and_replaces_jarvis(monkeypatch, tmp_path):
     run_updater.apply_update(current, replacement, hashlib.sha256(b"new").hexdigest())
 
     assert current.read_bytes() == b"new"
-    assert commands[0] == ["taskkill", "/F", "/IM", "JARVIS.exe"]
+    assert commands[0] == ["taskkill", "/F", "/T", "/IM", "JARVIS.exe"]
     assert options[0]["creationflags"] == 321
     assert launched == [str(current)]

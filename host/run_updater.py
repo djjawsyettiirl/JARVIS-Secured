@@ -29,9 +29,10 @@ def apply_update(current: Path, replacement: Path, expected_sha256: str) -> None
 
     # A one-file PyInstaller app has a parent bootloader and a child process.
     # Closing only the child leaves the executable locked, so terminate every
-    # JARVIS process before attempting the atomic replacement.
+    # JARVIS process and its WebView/tunnel children before replacement. Leaving
+    # those children orphaned can prevent the restarted UI from creating a window.
     subprocess.run(
-        ["taskkill", "/F", "/IM", "JARVIS.exe"],
+        ["taskkill", "/F", "/T", "/IM", "JARVIS.exe"],
         capture_output=True,
         check=False,
         **hidden_process_kwargs(),
