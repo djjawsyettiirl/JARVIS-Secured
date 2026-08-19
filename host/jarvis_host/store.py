@@ -15,6 +15,7 @@ ALL_SCOPES = [
     "chat", "pc_status", "notifications", "microphone", "camera",
     "files_read", "files_write", "pc_control", "google_gmail",
     "google_calendar", "maps", "alarms", "messaging", "location_share", "software_updates", "admin",
+    "offline_search",
 ]
 
 

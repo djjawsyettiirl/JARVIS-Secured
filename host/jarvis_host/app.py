@@ -9,12 +9,13 @@ from collections import defaultdict, deque
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .store import Store
 from .assistant import respond
+from .online_assistant import online_assistant
 from .updater import updater
 from . import tunnel
 
@@ -207,6 +208,25 @@ def verify(request: AuthenticateRequest, http_request: Request):
 def connection_routes(http_request: Request, authorization: str | None = Header(default=None)):
     device_id = _authenticated_device(authorization, _route_kind(http_request))
     return {**_connection_routes(), "active_route": _route_kind(http_request), "device_id": device_id}
+
+
+@app.get("/search/mobile-credentials")
+def mobile_search_credentials(
+    http_request: Request,
+    response: Response,
+    authorization: str | None = Header(default=None),
+):
+    route = _route_kind(http_request)
+    device_id = _authenticated_device(authorization, route)
+    if "offline_search" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the offline_search capability")
+    if route != "remote":
+        raise HTTPException(status_code=403, detail="Search credentials are synchronized only through the encrypted remote route")
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "provider": "serpapi",
+        "serpapi_key": online_assistant.serpapi_key() or None,
+    }
 
 
 @app.post("/assistant")

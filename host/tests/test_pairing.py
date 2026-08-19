@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from fastapi.testclient import TestClient
 
 from jarvis_host.app import app, store
+from jarvis_host.online_assistant import online_assistant
 
 
 def key_pem():
@@ -144,6 +145,28 @@ def test_assistant_rejects_missing_session():
     client = TestClient(app)
     response = client.post("/assistant", json={"message": "hello"})
     assert response.status_code == 401
+
+
+def test_search_credentials_require_permission_and_encrypted_remote_route(monkeypatch, tmp_path):
+    fresh_store(monkeypatch, tmp_path)
+    monkeypatch.setattr(online_assistant, "serpapi_key", lambda: "private-search-key")
+    client = TestClient(app)
+    key, public = key_pem()
+    result = pair(client, key, public, store.create_pairing())
+    token = authenticate_device(client, key, result)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert client.get("/search/mobile-credentials", headers=headers).status_code == 403
+    store.set_scopes(result["device_id"], ["chat", "offline_search"])
+    assert client.get("/search/mobile-credentials", headers=headers).status_code == 403
+
+    remote = client.get(
+        "/search/mobile-credentials",
+        headers={**headers, "cf-connecting-ip": "198.51.100.20"},
+    )
+    assert remote.status_code == 200
+    assert remote.headers["cache-control"] == "no-store"
+    assert remote.json()["serpapi_key"] == "private-search-key"
 
 
 def authenticate_device(client, key, pairing_result):
