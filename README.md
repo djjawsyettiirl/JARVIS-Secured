@@ -15,7 +15,7 @@ A secure, multi-device personal AI assistant. The Windows host is the primary no
 - Voice input and spoken replies on Windows and Android
 - Local alarms, Google Maps actions, and Google-ready Gmail/Calendar integration
 - Automatic Cloudflare Quick Tunnel startup in the packaged Windows build
-- Live internet search and recommendations through your private SearXNG server
+- Live internet search through your private SearXNG server with optional SerpAPI fallback
 - General voice-directed messaging between Android and the Windows home client
 
 See `docs/architecture.md` for the protocol design.

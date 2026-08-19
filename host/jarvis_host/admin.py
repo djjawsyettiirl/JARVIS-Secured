@@ -29,6 +29,10 @@ class SearxngRequest(BaseModel):
     url: str = Field(min_length=8, max_length=2048)
 
 
+class SerpApiRequest(BaseModel):
+    api_key: str = Field(min_length=20, max_length=300)
+
+
 class VoiceRequest(AssistantRequest):
     queue: bool = False
 
@@ -133,12 +137,15 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 <button id='voiceButton' class='secondary' type='button' onclick='startVoice()'>🎙 Speak</button>
 <p id='assistantReply'>Ready.</p></section>
 
-<div class='card'><h2>SearXNG internet search</h2>
+<div class='card'><h2>Internet search</h2>
 <span id='searchBadge' class='warn badge'>Checking…</span>
-<p class='small'>JARVIS uses only your private SearXNG server for internet searches. No Brave or OpenAI search key is used.</p>
+<p class='small'>JARVIS prefers your private SearXNG server and automatically falls back to SerpAPI when SearXNG is unavailable.</p>
 <input id='searxngUrl' class='assistant' type='url' placeholder='http://127.0.0.1:8080' autocomplete='url'>
 <button type='button' onclick='saveSearxng()'>Save and test SearXNG</button>
 <button class='danger' type='button' onclick='removeSearxng()'>Use local default</button>
+<p><input id='serpapiKey' class='assistant' type='password' placeholder='SerpAPI key' autocomplete='new-password'>
+<button type='button' onclick='saveSerpApi()'>Save and test SerpAPI</button>
+<button class='danger' type='button' onclick='removeSerpApi()'>Remove SerpAPI key</button></p>
 <p id='searchDetail' class='small'></p></div>
 
 <div class='card'><h2>Google account</h2>
@@ -223,10 +230,12 @@ async function googleStatus() {{
 async function connectGoogle() {{ await fetch('/google/connect', {{method:'POST'}}); googleStatus(); }}
 async function disconnectGoogle() {{ await fetch('/google/disconnect', {{method:'POST'}}); googleStatus(); }}
 async function searchStatus() {{
-  try {{ const data = await (await fetch('/search/status')).json(); const badge = document.getElementById('searchBadge'); badge.textContent = data.connected ? 'SearXNG connected' : 'SearXNG offline'; badge.className = (data.connected ? 'online' : 'warn') + ' badge'; document.getElementById('searchDetail').textContent = data.connected ? 'Connected to ' + data.url : (data.error || 'Start SearXNG, then save its URL here.'); }} catch (_) {{}}
+  try {{ const data = await (await fetch('/search/status')).json(); const ready = data.connected || data.serpapi_configured; const badge = document.getElementById('searchBadge'); badge.textContent = data.connected ? 'SearXNG connected' : (data.serpapi_configured ? 'SerpAPI fallback ready' : 'Search setup required'); badge.className = (ready ? 'online' : 'warn') + ' badge'; const searx = data.connected ? 'SearXNG connected: ' + data.url : 'SearXNG offline: ' + (data.error || data.url); const serp = data.serpapi_configured ? 'SerpAPI key saved as fallback.' : 'SerpAPI is not configured.'; document.getElementById('searchDetail').textContent = searx + ' ' + serp; }} catch (_) {{}}
 }}
 async function saveSearxng() {{ const input = document.getElementById('searxngUrl'); const response = await fetch('/search/searxng', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{url:input.value}})}}); const data = await response.json(); if (!response.ok) alert(data.detail || 'Could not save SearXNG'); searchStatus(); }}
 async function removeSearxng() {{ await fetch('/search/searxng', {{method:'DELETE'}}); document.getElementById('searxngUrl').value=''; searchStatus(); }}
+async function saveSerpApi() {{ const input = document.getElementById('serpapiKey'); const response = await fetch('/search/serpapi', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{api_key:input.value}})}}); const data = await response.json(); if (!response.ok) alert(data.detail || 'Could not validate SerpAPI key'); else input.value=''; searchStatus(); }}
+async function removeSerpApi() {{ await fetch('/search/serpapi', {{method:'DELETE'}}); document.getElementById('serpapiKey').value=''; searchStatus(); }}
 async function tunnelStatus() {{
   try {{
     const data = await (await fetch('/tunnel/status')).json();
@@ -376,6 +385,26 @@ def save_searxng(request: SearxngRequest):
 def remove_searxng():
     online_assistant.remove_searxng_url()
     return online_assistant.connection_status()
+
+
+@admin_app.post("/search/serpapi")
+def save_serpapi(request: SerpApiRequest):
+    try:
+        online_assistant.save_serpapi_key(request.api_key)
+        results = online_assistant._serpapi("SerpAPI connection test")
+        if not results:
+            raise ValueError("SerpAPI returned no test results")
+        return {"configured": True, "tested": True}
+    except Exception as exc:
+        online_assistant.remove_serpapi_key()
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@admin_app.delete("/search/serpapi")
+def remove_serpapi():
+    online_assistant.remove_serpapi_key()
+    return {"configured": False}
 
 
 @admin_app.post("/assistant")
