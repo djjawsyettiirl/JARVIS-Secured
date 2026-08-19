@@ -22,6 +22,30 @@ def test_private_update_check_reports_current_build(monkeypatch):
     assert result["status"] == "up_to_date"
 
 
+def test_private_update_commands_use_hidden_process_options(monkeypatch):
+    updater = Updater()
+    captured = {}
+    monkeypatch.setattr(updater, "_gh", lambda: "gh.exe")
+    monkeypatch.setattr(updater_module, "hidden_process_kwargs", lambda: {"creationflags": 123, "startupinfo": "hidden"})
+
+    class Completed:
+        returncode = 0
+        stdout = "[]"
+        stderr = ""
+
+    def run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return Completed()
+
+    monkeypatch.setattr(updater_module.subprocess, "run", run)
+
+    assert updater._run("run", "list") == "[]"
+    assert captured["command"] == ["gh.exe", "run", "list"]
+    assert captured["kwargs"]["creationflags"] == 123
+    assert captured["kwargs"]["startupinfo"] == "hidden"
+
+
 def test_stale_android_apk_is_not_reported_ready(monkeypatch, tmp_path):
     updater = Updater()
     monkeypatch.setattr(type(updater), "update_dir", property(lambda self: tmp_path))

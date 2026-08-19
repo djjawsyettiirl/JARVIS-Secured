@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .google_account import data_dir
+from windows_process import hidden_process_kwargs
 
 REPOSITORY = "djjawsyettiirl/JARVIS-Secured"
 BRANCH = "v0.1-secure-pairing"
@@ -73,7 +74,13 @@ class Updater:
 
     def _run(self, *args: str) -> str:
         completed = subprocess.run(
-            [self._gh(), *args], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180
+            [self._gh(), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+            **hidden_process_kwargs(),
         )
         if completed.returncode != 0:
             raise RuntimeError((completed.stderr or completed.stdout).strip())
@@ -209,7 +216,11 @@ class Updater:
         digest = hashlib.sha256(replacement.read_bytes()).hexdigest()
         subprocess.Popen(
             [str(companion), "--current", str(Path(sys.executable)), "--replacement", str(replacement), "--sha256", digest],
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            **hidden_process_kwargs(detached=True),
         )
         return True
 
