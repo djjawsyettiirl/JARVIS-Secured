@@ -1,6 +1,8 @@
 import os
 import threading
 import time
+import traceback
+from datetime import datetime, timezone
 
 import uvicorn
 import webview
@@ -12,6 +14,7 @@ from jarvis_host import tunnel
 from jarvis_host.updater import updater
 from jarvis_host import route_rendezvous
 from jarvis_host import assistant_ui
+from jarvis_host.google_account import data_dir
 
 app.include_router(route_rendezvous.router)
 admin_app.include_router(assistant_ui.router)
@@ -54,9 +57,24 @@ def _automatic_update_loop() -> None:
         time.sleep(300)
 
 
+def _startup_log(message: str) -> None:
+    try:
+        path = data_dir() / "startup.log"
+        with path.open("a", encoding="utf-8") as stream:
+            stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            stream.write(f"{stamp} {message}\n")
+    except Exception:
+        pass
+
+
 def _show_main_window(window) -> None:
     """Make packaged launches visible even when a hidden updater is the ancestor."""
-    window.show()
+    try:
+        time.sleep(0.5)
+        window.show()
+        _startup_log("main window shown")
+    except Exception:
+        _startup_log("main window show failed\n" + traceback.format_exc())
 
 
 def main() -> None:
@@ -64,6 +82,7 @@ def main() -> None:
         from jarvis_host.windows_voice import windows_voice
         windows_voice.validate()
         return
+    _startup_log("host startup began")
     code = store.create_pairing()
     admin.current_pairing_code = code
 
@@ -90,8 +109,13 @@ def main() -> None:
         background_color="#08090c",
         text_select=True,
     )
+    _startup_log("main window created")
     try:
         webview.start(_show_main_window, (window,), gui="edgechromium", private_mode=True)
+        _startup_log("webview loop returned")
+    except Exception:
+        _startup_log("webview loop failed\n" + traceback.format_exc())
+        raise
     finally:
         tunnel.stop_tunnel()
         admin_server.should_exit = True
