@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .google_account import data_dir
+from .version import VERSION
 from windows_process import hidden_process_kwargs
 
 REPOSITORY = "djjawsyettiirl/JARVIS-Secured"
@@ -43,6 +44,16 @@ class Updater:
     @property
     def android_apk(self) -> Path:
         return self.update_dir / "android" / "app-release.apk"
+
+    @property
+    def android_build_file(self) -> Path:
+        return self.update_dir / "android" / "android-build.json"
+
+    def android_build(self) -> dict[str, object]:
+        try:
+            return json.loads(self.android_build_file.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
 
     @property
     def old_development_dir(self) -> Path:
@@ -169,6 +180,16 @@ class Updater:
         self._run("run", "download", str(run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-android-apk", "-D", str(pending))
         if not (pending / "app-release.apk").is_file():
             raise FileNotFoundError("The latest Android build did not contain app-release.apk")
+        build_file = pending / "android-build.json"
+        if not build_file.is_file():
+            raise FileNotFoundError("The Android artifact has no build identity and was rejected as outdated")
+        build = json.loads(build_file.read_text(encoding="utf-8"))
+        if str(build.get("commit", "")) != str(run.get("headSha", "")):
+            raise RuntimeError("The Android artifact commit does not match the selected build")
+        if str(build.get("version", "")) != VERSION:
+            raise RuntimeError(f"The Android artifact version is {build.get('version', 'unknown')}, expected {VERSION}")
+        if int(build.get("version_code", 0)) < 1_600_000:
+            raise RuntimeError("The Android artifact version code is outdated")
         (pending / ".run-id").write_text(str(run["databaseId"]), encoding="utf-8")
         self._archive_existing(target, "android-update")
         pending.replace(target)
@@ -231,6 +252,7 @@ class Updater:
             "windows_run": self.windows_run,
             "android_run": self.android_run,
             "android_ready": self.status == "ready" and self.android_apk.is_file(),
+            "android_build": self.android_build(),
             "current_build": self.current_build(),
         }
 

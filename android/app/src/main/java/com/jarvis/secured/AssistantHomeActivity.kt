@@ -123,7 +123,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         bar.addView(Button(this).apply { text="🎙"; textSize=18f; setTextColor(primary); background=rounded("#222936",24); setOnClickListener{startVoice()} }, LinearLayout.LayoutParams(dp(50),dp(50)).apply{marginStart=dp(4)})
         bar.addView(Button(this).apply { text="➤"; textSize=18f; setTextColor(Color.WHITE); background=rounded("#3269D8",24); setOnClickListener{sendCurrent()} }, LinearLayout.LayoutParams(dp(50),dp(50)).apply{marginStart=dp(6)})
         root.addView(bar)
-        root.addView(TextView(this).apply { text="Assistant Jarvis · V 1.2"; textSize=10.5f; setTextColor(Color.parseColor("#596271")); gravity=Gravity.CENTER; setPadding(0,dp(7),0,0) })
+        root.addView(TextView(this).apply { text="Assistant Jarvis · V ${BuildConfig.VERSION_NAME}"; textSize=10.5f; setTextColor(Color.parseColor("#596271")); gravity=Gravity.CENTER; setPadding(0,dp(7),0,0) })
         setContentView(root)
     }
 

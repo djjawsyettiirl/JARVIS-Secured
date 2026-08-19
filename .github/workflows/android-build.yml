@@ -36,14 +36,26 @@ jobs:
           [IO.File]::WriteAllBytes('jarvis-release.jks', [Convert]::FromBase64String('${{ secrets.JARVIS_ANDROID_KEYSTORE_B64 }}'))
       - name: Build signed private APK
         env:
+          JARVIS_BUILD_NUMBER: ${{ github.run_number }}
           JARVIS_KEYSTORE_PATH: ${{ github.workspace }}/android/jarvis-release.jks
           JARVIS_KEYSTORE_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEYSTORE_PASSWORD }}
           JARVIS_KEY_ALIAS: ${{ secrets.JARVIS_ANDROID_KEY_ALIAS }}
           JARVIS_KEY_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEY_PASSWORD }}
         run: gradle assembleRelease --no-daemon --stacktrace
+      - name: Stamp Android build identity
+        shell: pwsh
+        run: |
+          @{
+            version = '1.6.0'
+            version_code = 1600000 + [int]'${{ github.run_number }}'
+            commit = '${{ github.sha }}'
+            run_id = '${{ github.run_id }}'
+          } | ConvertTo-Json | Set-Content app/build/outputs/apk/release/android-build.json
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: jarvis-android-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/android-build.json
           if-no-files-found: error

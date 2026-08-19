@@ -11,8 +11,9 @@ android {
         applicationId = "com.jarvis.secured"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.2"
+        val ciBuildNumber = System.getenv("JARVIS_BUILD_NUMBER")?.toIntOrNull() ?: 0
+        versionCode = 1_600_000 + ciBuildNumber
+        versionName = "1.6.0"
     }
 
     signingConfigs {

@@ -15,6 +15,7 @@ from jarvis_host.updater import updater
 from jarvis_host import route_rendezvous
 from jarvis_host import assistant_ui
 from jarvis_host.google_account import data_dir
+from jarvis_host.version import VERSION
 
 app.include_router(route_rendezvous.router)
 admin_app.include_router(assistant_ui.router)
@@ -101,7 +102,7 @@ def main() -> None:
 
     time.sleep(0.8)
     window = webview.create_window(
-        "Assistant Jarvis · V 1.2",
+        f"Assistant Jarvis · V {VERSION}",
         "http://127.0.0.1:8766/assistant-v1",
         width=1280,
         height=860,

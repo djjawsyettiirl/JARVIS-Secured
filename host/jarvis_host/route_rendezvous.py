@@ -10,6 +10,7 @@ import time
 import urllib.request
 
 import keyring
+from .version import VERSION
 from fastapi import APIRouter, Header
 
 from . import tunnel
@@ -83,7 +84,7 @@ def _publish(device_id: str, remote_url: str, generation: int) -> None:
     request = urllib.request.Request(
         f"{BROKER}/{topic}",
         data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
-        headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "JARVIS/0.5.6"},
+        headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": f"JARVIS/{VERSION}"},
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=10) as response:

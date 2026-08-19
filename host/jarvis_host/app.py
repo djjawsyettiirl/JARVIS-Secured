@@ -18,8 +18,9 @@ from .assistant import respond
 from .online_assistant import online_assistant
 from .updater import updater
 from . import tunnel
+from .version import VERSION
 
-app = FastAPI(title="Assistant Jarvis Secure Host", version="1.2")
+app = FastAPI(title="Assistant Jarvis Secure Host", version=VERSION)
 store = Store()
 challenges: dict[str, tuple[str, float]] = {}
 sessions: dict[str, tuple[str, float]] = {}
@@ -268,7 +269,10 @@ def android_update_status(http_request: Request, authorization: str | None = Hea
     device_id = _authenticated_device(authorization, _route_kind(http_request))
     if "software_updates" not in store.get_scopes(device_id):
         raise HTTPException(status_code=403, detail="This device does not have the software_updates capability")
-    return {"available": updater.status == "ready" and updater.android_apk.is_file()}
+    return {
+        "available": updater.status == "ready" and updater.android_apk.is_file(),
+        "build": updater.android_build(),
+    }
 
 
 @app.get("/updates/android")

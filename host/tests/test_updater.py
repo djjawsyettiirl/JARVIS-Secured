@@ -1,5 +1,7 @@
 from jarvis_host.updater import Updater
 import jarvis_host.updater as updater_module
+import json
+import pytest
 
 
 def test_private_update_check_reports_new_commit(monkeypatch):
@@ -115,3 +117,35 @@ def test_replaced_updates_move_to_old_development(monkeypatch, tmp_path):
     archived = list(archive.glob("android-update-*/app-release.apk"))
     assert len(archived) == 1
     assert archived[0].read_bytes() == b"old"
+
+
+def test_android_artifact_without_matching_build_identity_is_rejected(monkeypatch, tmp_path):
+    updater = Updater()
+    monkeypatch.setattr(type(updater), "update_dir", property(lambda self: tmp_path))
+
+    def download_without_identity(*_args):
+        pending = tmp_path / "android-next"
+        (pending / "app-release.apk").write_bytes(b"apk")
+        return ""
+
+    monkeypatch.setattr(updater, "_run", download_without_identity)
+    with pytest.raises(FileNotFoundError, match="build identity"):
+        updater._stage_android_run({"databaseId": 10, "headSha": "new"})
+
+
+def test_android_artifact_identity_must_match_selected_commit(monkeypatch, tmp_path):
+    updater = Updater()
+    monkeypatch.setattr(type(updater), "update_dir", property(lambda self: tmp_path))
+
+    def download_mismatched(*_args):
+        pending = tmp_path / "android-next"
+        (pending / "app-release.apk").write_bytes(b"apk")
+        (pending / "android-build.json").write_text(
+            json.dumps({"version": "1.6.0", "version_code": 1600001, "commit": "old"}),
+            encoding="utf-8",
+        )
+        return ""
+
+    monkeypatch.setattr(updater, "_run", download_mismatched)
+    with pytest.raises(RuntimeError, match="commit"):
+        updater._stage_android_run({"databaseId": 10, "headSha": "new"})
