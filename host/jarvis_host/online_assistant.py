@@ -53,11 +53,16 @@ class OnlineAssistant:
             or self.serpapi_key()
         )
 
-    def _searxng(self, query: str) -> list[dict[str, str]]:
+    def _searxng(self, query: str, search_type: str = "web") -> list[dict[str, str]]:
         with httpx.Client(timeout=8.0, follow_redirects=True) as client:
             response = client.get(
                 f"{self.searxng_url()}/search",
-                params={"q": query, "format": "json", "language": "en"},
+                params={
+                    "q": query,
+                    "format": "json",
+                    "language": "en",
+                    "categories": {"web": "general", "images": "images", "videos": "videos"}[search_type],
+                },
             )
             response.raise_for_status()
             data = response.json()
@@ -71,10 +76,12 @@ class OnlineAssistant:
                 "url": link,
                 "snippet": str(item.get("content") or "").strip(),
                 "provider": "SearXNG",
+                "type": search_type,
+                "thumbnail": str(item.get("thumbnail_src") or item.get("img_src") or item.get("thumbnail") or ""),
             })
         return results
 
-    def _serpapi(self, query: str) -> list[dict[str, str]]:
+    def _serpapi(self, query: str, search_type: str = "web") -> list[dict[str, str]]:
         key = self.serpapi_key()
         if not key:
             raise RuntimeError("SerpAPI is not configured")
@@ -82,7 +89,7 @@ class OnlineAssistant:
             response = client.get(
                 "https://serpapi.com/search.json",
                 params={
-                    "engine": "google",
+                    "engine": {"web": "google", "images": "google_images", "videos": "google_videos"}[search_type],
                     "q": query,
                     "api_key": key,
                     "hl": "en",
@@ -99,15 +106,18 @@ class OnlineAssistant:
         if data.get("error"):
             raise RuntimeError(str(data["error"]))
         results = []
-        for item in data.get("organic_results", [])[:6]:
-            link = str(item.get("link") or "")
+        result_key = {"web": "organic_results", "images": "images_results", "videos": "video_results"}[search_type]
+        for item in data.get(result_key, [])[:6]:
+            link = str(item.get("link") or item.get("original") or "")
             if not link:
                 continue
             results.append({
                 "title": str(item.get("title") or link),
                 "url": link,
-                "snippet": str(item.get("snippet") or "").strip(),
+                "snippet": str(item.get("snippet") or item.get("source") or item.get("channel") or "").strip(),
                 "provider": "SerpAPI",
+                "type": search_type,
+                "thumbnail": str(item.get("thumbnail") or item.get("image") or ""),
             })
         return results
 
@@ -131,10 +141,12 @@ class OnlineAssistant:
                 "serpapi_configured": bool(self.serpapi_key()),
             }
 
-    def search(self, query: str) -> tuple[list[dict[str, str]], str]:
+    def search(self, query: str, search_type: str = "web") -> tuple[list[dict[str, str]], str]:
+        if search_type not in {"web", "images", "videos"}:
+            raise ValueError("Search type must be web, images, or videos")
         errors = []
         try:
-            results = self._searxng(query)
+            results = self._searxng(query, search_type)
             if results:
                 return results, "searxng"
             errors.append("SearXNG returned no results")
@@ -142,7 +154,7 @@ class OnlineAssistant:
             errors.append(f"SearXNG: {exc}")
         if self.serpapi_key():
             try:
-                results = self._serpapi(query)
+                results = self._serpapi(query, search_type)
                 if results:
                     return results, "serpapi"
                 errors.append("SerpAPI returned no results")
@@ -150,9 +162,9 @@ class OnlineAssistant:
                 errors.append(f"SerpAPI: {exc}")
         raise RuntimeError("; ".join(errors))
 
-    def ask(self, message: str) -> dict[str, object]:
+    def ask(self, message: str, search_type: str = "web") -> dict[str, object]:
         try:
-            results, provider = self.search(message)
+            results, provider = self.search(message, search_type)
         except Exception as exc:
             return {
                 "reply": f"Internet search is unavailable right now: {exc}",
@@ -161,7 +173,8 @@ class OnlineAssistant:
             }
 
         provider_name = "SearXNG" if provider == "searxng" else "SerpAPI"
-        lines = [f"Web results via {provider_name}:"]
+        label = {"web": "Web", "images": "Image", "videos": "Video"}[search_type]
+        lines = [f"{label} results via {provider_name}:"]
         for index, item in enumerate(results[:3], 1):
             snippet = item["snippet"][:120].strip()
             lines.append(
@@ -169,7 +182,7 @@ class OnlineAssistant:
                 + (f" — {snippet}" if snippet else "")
                 + f"\n{item['url']}"
             )
-        return {"reply": "\n\n".join(lines), "sources": results[:3], "search_provider": provider_name, "action": None}
+        return {"reply": "\n\n".join(lines), "sources": results[:3], "search_provider": provider_name, "search_type": search_type, "action": None}
 
 
 online_assistant = OnlineAssistant()

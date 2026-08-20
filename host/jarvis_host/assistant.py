@@ -17,7 +17,7 @@ def _require(allowed_scopes: set[str] | None, scope: str) -> None:
         raise PermissionError(f"This device does not have the {scope} capability")
 
 
-def respond(message: str, allowed_scopes: set[str] | None = None) -> dict[str, object]:
+def respond(message: str, allowed_scopes: set[str] | None = None, search_type: str = "web") -> dict[str, object]:
     text = " ".join(message.strip().split())
     lowered = text.lower()
     if not text:
@@ -89,4 +89,4 @@ def respond(message: str, allowed_scopes: set[str] | None = None) -> dict[str, o
             if destination:
                 url = f"https://www.google.com/maps/search/?api=1&query={quote_plus(destination)}"
                 return {"reply": f"Opening Google Maps for {destination}.", "action": {"type": "open_url", "url": url}}
-    return online_assistant.ask(text)
+    return online_assistant.ask(text, search_type)

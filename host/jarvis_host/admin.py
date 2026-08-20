@@ -24,6 +24,7 @@ current_pairing_code = ""
 
 class AssistantRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
+    search_type: str = Field(default="web", pattern=r"^(web|images|videos)$")
 
 
 class SearxngRequest(BaseModel):
@@ -411,7 +412,7 @@ def remove_serpapi():
 @admin_app.post("/assistant")
 def assistant(request: AssistantRequest):
     try:
-        return respond(request.message)
+        return respond(request.message, search_type=request.search_type)
     except Exception as exc:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=str(exc)) from exc

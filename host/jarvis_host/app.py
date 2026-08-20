@@ -52,6 +52,7 @@ class AuthenticateRequest(BaseModel):
 
 class AssistantRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
+    search_type: str = Field(default="web", pattern=r"^(web|images|videos)$")
 
 
 class MessageRequest(BaseModel):
@@ -236,7 +237,7 @@ def assistant(request: AssistantRequest, http_request: Request, authorization: s
     if "chat" not in store.get_scopes(device_id):
         raise HTTPException(status_code=403, detail="This device does not have the chat capability")
     try:
-        return respond(request.message, set(store.get_scopes(device_id)))
+        return respond(request.message, set(store.get_scopes(device_id)), request.search_type)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

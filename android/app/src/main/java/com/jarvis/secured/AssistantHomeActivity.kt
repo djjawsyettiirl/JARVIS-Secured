@@ -48,6 +48,9 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var conversation: LinearLayout
     private lateinit var conversationScroll: ScrollView
     private lateinit var greeting: LinearLayout
+    private lateinit var searchTabs: LinearLayout
+    private var searchType = "web"
+    private var lastSearchQuery: String? = null
     private var targetHome = false
     private var sessionToken: String? = null
     private var activeRoute: String? = null
@@ -112,6 +115,15 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         greeting.addView(TextView(this).apply { text="Ask Jarvis or message Home from the same bar."; textSize=14f; setTextColor(muted); gravity=Gravity.CENTER; setPadding(0,dp(8),0,0) })
         root.addView(greeting)
 
+        searchTabs = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.START; visibility=View.GONE; setPadding(0,0,0,dp(7)) }
+        listOf("web" to "Web", "images" to "Images", "videos" to "Videos").forEach { (kind,label) ->
+            searchTabs.addView(Button(this).apply {
+                text=label; textSize=12f; isAllCaps=false; tag=kind; minHeight=dp(38); setTextColor(primary); background=rounded(if(kind==searchType)"#3269D8" else "#171C23",16,"#2A313B")
+                setOnClickListener { selectSearchType(kind) }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,dp(40)).apply{marginEnd=dp(7)})
+        }
+        root.addView(searchTabs)
+
         conversation = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; gravity=Gravity.BOTTOM; setPadding(0,dp(4),0,dp(10)) }
         conversationScroll = ScrollView(this).apply { isFillViewport=true; clipToPadding=false; addView(conversation, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT)) }
         root.addView(conversationScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
@@ -136,6 +148,15 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun updateTarget() { targetButton.text=if(targetHome)"Home" else "Jarvis"; composer.hint=if(targetHome)"Message Home…" else "Ask Jarvis anything…" }
+    private fun selectSearchType(kind:String) {
+        searchType=kind
+        for(i in 0 until searchTabs.childCount)(searchTabs.getChildAt(i) as Button).background=rounded(if(searchTabs.getChildAt(i).tag==kind)"#3269D8" else "#171C23",16,"#2A313B")
+        val query=lastSearchQuery?:return
+        addMessage("Search", "${kind.replaceFirstChar{it.uppercase()}} · $query", mine=true)
+        val token=sessionToken;val route=activeRoute
+        if(token!=null&&route!=null)ask(route,token,query,false) else directSearch(query,false)
+    }
+    private fun showSearchTabs(query:String) { lastSearchQuery=query;searchTabs.visibility=View.VISIBLE }
     private fun hideGreeting() { if (greeting.visibility != View.GONE) greeting.visibility = View.GONE }
     private fun addMessage(sender:String, body:String, mine:Boolean=false, system:Boolean=false) {
         hideGreeting()
@@ -202,6 +223,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val text=composer.text.toString().trim();if(text.isEmpty())return;composer.text.clear()
         addMessage(if(targetHome)"You → Home" else "You",text,mine=true)
         val target=if(targetHome)"home" else "jarvis"
+        if(!targetHome)lastSearchQuery=text
         val token=sessionToken;val route=activeRoute
         if(token==null || route==null){
             if(!targetHome) {
@@ -216,10 +238,10 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun ask(route:String, token:String, text:String, queueOnFailure:Boolean) {
         Thread {
             try {
-                val req=Request.Builder().url("$route/assistant").header("Authorization","Bearer $token").post(JSONObject().put("message",text).toString().toRequestBody(jsonType)).build()
+                val req=Request.Builder().url("$route/assistant").header("Authorization","Bearer $token").post(JSONObject().put("message",text).put("search_type",searchType).toString().toRequestBody(jsonType)).build()
                 val obj=http.newCall(req).execute().use{r->val b=r.body?.string()?:"{}";if(!r.isSuccessful)error(errorDetail(b,"request failed"));JSONObject(b)}
                 val reply=obj.optString("reply","No reply yet.")
-                runOnUiThread{addMessage("Jarvis",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"assistant-reply");obj.optJSONObject("action")?.takeIf{it.optString("type")=="open_url"}?.let{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(it.getString("url"))))}}
+                runOnUiThread{if((obj.optJSONArray("sources")?.length() ?: 0)>0)showSearchTabs(text);addMessage("Jarvis",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"assistant-reply");obj.optJSONObject("action")?.takeIf{it.optString("type")=="open_url"}?.let{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(it.getString("url"))))}}
             } catch(e:Exception) {
                 sessionToken=null
                 val local=OfflineCapabilities.actionFor(text)
@@ -227,7 +249,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     runOnUiThread{val confirmation=OfflineCapabilities.launch(this,text)?:local.confirmation;addMessage("Jarvis · limited",confirmation,system=true);connection.text=OfflineCapabilities.status(this)}
                 } else if(SecureSearchCredentials.serpApiKey(this)!=null) {
                     val reply=directSerpApi(text)
-                    runOnUiThread{connection.text=OfflineCapabilities.status(this);if(reply!=null){addMessage("Jarvis · direct SerpAPI",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"direct-search-reply")}else if(queueOnFailure)enqueue("jarvis",text) else addMessage("Jarvis","Queued until reconnect",system=true)}
+                    runOnUiThread{connection.text=OfflineCapabilities.status(this);if(reply!=null){showSearchTabs(text);addMessage("Jarvis · direct SerpAPI",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"direct-search-reply")}else if(queueOnFailure)enqueue("jarvis",text) else addMessage("Jarvis","Queued until reconnect",system=true)}
                 } else {
                     runOnUiThread{if(queueOnFailure)enqueue("jarvis",text) else addMessage("Jarvis","Queued until reconnect",system=true)}
                 }
@@ -250,7 +272,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         Thread {
             val reply=directSerpApi(text)
             runOnUiThread {
-                if(reply!=null){addMessage("Jarvis · direct SerpAPI",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"direct-search-reply")}
+                if(reply!=null){showSearchTabs(text);addMessage("Jarvis · direct SerpAPI",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"direct-search-reply")}
                 else if(queueOnFailure)enqueue("jarvis",text)
                 else addMessage("Jarvis","Direct search is unavailable",system=true)
             }
@@ -258,7 +280,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun directSerpApi(text:String):String? {
-        return DirectSerpApiSearch.search(this,text)
+        return DirectSerpApiSearch.search(this,text,searchType)
     }
 
     private fun sendHome(route:String, token:String, text:String, queueOnFailure:Boolean) {
