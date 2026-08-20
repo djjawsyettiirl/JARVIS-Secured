@@ -195,6 +195,7 @@ class Updater:
         pending.replace(target)
 
     def _download(self) -> None:
+        windows_staged = False
         try:
             self.windows_run = self._latest("windows-build.yml")
             self.android_run = self._latest("android-build.yml")
@@ -206,8 +207,17 @@ class Updater:
                 self._run("run", "download", str(self.windows_run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-windows-host", "-D", str(pending))
                 self._archive_existing(target, "windows-update")
                 pending.replace(target)
+                windows_staged = True
             if self.android_run:
-                self._stage_android_run(self.android_run)
+                try:
+                    self._stage_android_run(self.android_run)
+                except RuntimeError as exc:
+                    # A host upgrading to a new product version cannot validate
+                    # that version's Android APK until the new Windows host is
+                    # running. Do not block the Windows restart; startup will
+                    # stage the matching Android artifact immediately afterward.
+                    if not windows_staged or "expected" not in str(exc):
+                        raise
             self.status = "ready"
         except Exception as exc:
             self.status = "error"

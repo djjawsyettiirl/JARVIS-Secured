@@ -158,3 +158,28 @@ def test_android_artifact_identity_must_match_selected_commit(monkeypatch, tmp_p
     monkeypatch.setattr(updater, "_run", download_mismatched)
     with pytest.raises(RuntimeError, match="commit"):
         updater._stage_android_run({"databaseId": 10, "headSha": "new"})
+
+
+def test_new_windows_version_is_ready_even_when_old_host_rejects_android(monkeypatch, tmp_path):
+    updater = Updater()
+    monkeypatch.setattr(type(updater), "update_dir", property(lambda self: tmp_path))
+    monkeypatch.setattr(type(updater), "old_development_dir", property(lambda self: tmp_path / "old"))
+    monkeypatch.setattr(updater, "_latest", lambda workflow: {"databaseId": 10, "headSha": "new"})
+
+    def download(*args):
+        if "jarvis-windows-host" in args:
+            pending = tmp_path / "windows-next"
+            (pending / "JARVIS-Windows-Host.zip").write_bytes(b"windows")
+        return ""
+
+    monkeypatch.setattr(updater, "_run", download)
+    monkeypatch.setattr(
+        updater,
+        "_stage_android_run",
+        lambda _run: (_ for _ in ()).throw(RuntimeError("Android version is 1.6.1, expected 1.6.0")),
+    )
+
+    updater._download()
+
+    assert updater.status == "ready"
+    assert (tmp_path / "windows" / "JARVIS-Windows-Host.zip").is_file()
