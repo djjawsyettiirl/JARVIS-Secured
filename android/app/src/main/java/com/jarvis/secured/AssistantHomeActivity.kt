@@ -30,7 +30,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -190,7 +189,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     startPolling();flushOfflineQueue();reconnecting=false;return@Thread
                 } catch(e:Exception){last=e}
             }
-            runOnUiThread{connection.text="Offline · ${last?.message?:"no saved route"}";connection.setTextColor(Color.parseColor("#D98B93"))};reconnecting=false
+            runOnUiThread{connection.text=OfflineCapabilities.status(this);connection.setTextColor(Color.parseColor("#D9B26F"))};reconnecting=false
         }.start()
     }
 
@@ -205,7 +204,10 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val target=if(targetHome)"home" else "jarvis"
         val token=sessionToken;val route=activeRoute
         if(token==null || route==null){
-            if(!targetHome && SecureSearchCredentials.serpApiKey(this)!=null) directSearch(text,true) else enqueue(target,text)
+            if(!targetHome) {
+                OfflineCapabilities.launch(this,text)?.let{addMessage("Jarvis · limited",it,system=true);return}
+                if(SecureSearchCredentials.serpApiKey(this)!=null) directSearch(text,true) else enqueue(target,text)
+            } else enqueue(target,text)
             return
         }
         if(targetHome)sendHome(route,token,text,true) else ask(route,token,text,true)
@@ -220,9 +222,12 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 runOnUiThread{addMessage("Jarvis",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"assistant-reply");obj.optJSONObject("action")?.takeIf{it.optString("type")=="open_url"}?.let{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(it.getString("url"))))}}
             } catch(e:Exception) {
                 sessionToken=null
-                if(SecureSearchCredentials.serpApiKey(this)!=null) {
+                val local=OfflineCapabilities.actionFor(text)
+                if(local!=null) {
+                    runOnUiThread{val confirmation=OfflineCapabilities.launch(this,text)?:local.confirmation;addMessage("Jarvis · limited",confirmation,system=true);connection.text=OfflineCapabilities.status(this)}
+                } else if(SecureSearchCredentials.serpApiKey(this)!=null) {
                     val reply=directSerpApi(text)
-                    runOnUiThread{if(reply!=null){addMessage("Jarvis · direct SerpAPI",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"direct-search-reply")}else if(queueOnFailure)enqueue("jarvis",text) else addMessage("Jarvis","Queued until reconnect",system=true)}
+                    runOnUiThread{connection.text=OfflineCapabilities.status(this);if(reply!=null){addMessage("Jarvis · direct SerpAPI",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"direct-search-reply")}else if(queueOnFailure)enqueue("jarvis",text) else addMessage("Jarvis","Queued until reconnect",system=true)}
                 } else {
                     runOnUiThread{if(queueOnFailure)enqueue("jarvis",text) else addMessage("Jarvis","Queued until reconnect",system=true)}
                 }
@@ -253,34 +258,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun directSerpApi(text:String):String? {
-        val key=SecureSearchCredentials.serpApiKey(this)?:return null
-        return runCatching {
-            val url="https://serpapi.com/search.json".toHttpUrl().newBuilder()
-                .addQueryParameter("engine","google")
-                .addQueryParameter("q",text)
-                .addQueryParameter("api_key",key)
-                .addQueryParameter("hl","en")
-                .addQueryParameter("gl","us")
-                .addQueryParameter("safe","active")
-                .build()
-            val request=Request.Builder().url(url).get().build()
-            http.newCall(request).execute().use { response ->
-                val data=JSONObject(response.body?.string()?:"{}")
-                if(!response.isSuccessful || data.has("error"))return@use null
-                val results=data.optJSONArray("organic_results")?:return@use null
-                buildString {
-                    append("Web results via SerpAPI:")
-                    for(i in 0 until minOf(3,results.length())) {
-                        val item=results.optJSONObject(i)?:continue
-                        val link=item.optString("link")
-                        if(link.isBlank())continue
-                        append("\n\n").append(i+1).append(". ").append(item.optString("title",link))
-                        item.optString("snippet").takeIf{it.isNotBlank()}?.let{append(" — ").append(it.take(120))}
-                        append("\n").append(link)
-                    }
-                }.takeIf{it!="Web results via SerpAPI:"}
-            }
-        }.getOrNull()
+        return DirectSerpApiSearch.search(this,text)
     }
 
     private fun sendHome(route:String, token:String, text:String, queueOnFailure:Boolean) {

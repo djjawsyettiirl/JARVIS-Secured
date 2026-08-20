@@ -78,6 +78,14 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
             speak("Yes?", "wake")
             return
         }
+        OfflineCapabilities.actionFor(command)?.let { local ->
+            awaitingCommand = false
+            processing = true
+            recognizer?.cancel()
+            updateNotification(local.confirmation, local.intent)
+            speak("${local.confirmation}. Tap the notification to continue.", "offline-action")
+            return
+        }
         awaitingCommand = false
         processing = true
         recognizer?.cancel()
@@ -143,17 +151,24 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-        .setContentTitle("JARVIS always listening")
-        .setContentText(text)
-        .setOngoing(ongoing)
-        .setCategory(NotificationCompat.CATEGORY_SERVICE)
-        .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-        .addAction(0, "Stop", PendingIntent.getService(this, 1, Intent(this, AlwaysListeningService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-        .build()
+    private fun notification(text: String, ongoing: Boolean, openIntent: Intent? = null): android.app.Notification {
+        val home = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setContentTitle("JARVIS always listening")
+            .setContentText(text)
+            .setOngoing(ongoing)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setContentIntent(home)
+            .addAction(0, "Stop", PendingIntent.getService(this, 1, Intent(this, AlwaysListeningService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        if (openIntent != null) {
+            val open = PendingIntent.getActivity(this, 2, openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            builder.setContentIntent(open).addAction(0, "Open", open)
+        }
+        return builder.build()
+    }
 
-    private fun updateNotification(text: String) = getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, true))
+    private fun updateNotification(text: String, openIntent: Intent? = null) = getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, true, openIntent))
 
     companion object {
         const val PREF_ENABLED = "always_listening_enabled"

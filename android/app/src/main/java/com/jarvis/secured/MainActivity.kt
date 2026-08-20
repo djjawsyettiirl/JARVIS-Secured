@@ -569,7 +569,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         val token = sessionToken
         if (token == null) {
-            assistantReply.text = "Pair or reconnect to the Windows host first."
+            OfflineCapabilities.launch(this, message)?.let { assistantReply.text = "Limited mode · $it"; return }
+            assistantReply.text = OfflineCapabilities.status(this)
+            Thread {
+                val reply = DirectSerpApiSearch.search(this, message)
+                runOnUiThread { assistantReply.text = reply ?: "Limited mode could not complete that request." }
+            }.start()
             return
         }
         val baseUrl = host.text.toString().trim().trimEnd('/')
@@ -630,7 +635,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     }
                 }
             } catch (e: Exception) {
-                runOnUiThread { assistantReply.text = "JARVIS error: ${e.message ?: "connection error"}" }
+                runOnUiThread {
+                    OfflineCapabilities.launch(this, message)?.let { assistantReply.text = "Limited mode · $it"; return@runOnUiThread }
+                    assistantReply.text = OfflineCapabilities.status(this)
+                    Thread {
+                        val reply = DirectSerpApiSearch.search(this, message)
+                        runOnUiThread { assistantReply.text = reply ?: "Limited mode could not complete that request." }
+                    }.start()
+                }
             }
         }.start()
     }

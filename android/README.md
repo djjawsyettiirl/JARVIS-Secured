@@ -29,6 +29,10 @@ Use **Set as default assistant** to open Android's assistant-role consent screen
 
 Continuous speech recognition consumes more battery than a hardware/DSP hotword detector and may use the phone's configured online speech-recognition provider when on-device recognition is unavailable.
 
+## Limited mode without Windows
+
+With the `offline_search` device capability enabled, JARVIS transfers the SerpAPI key over the remote HTTPS connection and stores it encrypted by Android Keystore. If the Windows host becomes unreachable, Android keeps that encrypted copy and labels itself **Limited mode**. Direct SerpAPI web results, Maps directions/searches, email composition, and Calendar event creation remain available. Home messages and host-only integrations queue or wait for reconnection.
+
 ### Important
 
 This build allows cleartext HTTP only to make the first LAN test easy. It is **not** an internet deployment. Do not port-forward 8765 or expose this development listener to the public internet. The next milestone is TLS/WSS, short-lived sessions, and scoped permissions.

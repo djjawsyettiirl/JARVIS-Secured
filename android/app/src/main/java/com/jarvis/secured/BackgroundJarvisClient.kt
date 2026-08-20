@@ -68,6 +68,7 @@ class BackgroundJarvisClient(private val context: Context) {
                 lastError = error
             }
         }
+        DirectSerpApiSearch.search(context, command)?.let { return it }
         throw lastError ?: IllegalStateException("No reachable JARVIS host")
     }
 }

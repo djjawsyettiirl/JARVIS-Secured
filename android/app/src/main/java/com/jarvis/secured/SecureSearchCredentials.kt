@@ -33,10 +33,7 @@ object SecureSearchCredentials {
     }
 
     fun saveSerpApiKey(context: Context, value: String?) {
-        if (value.isNullOrBlank()) {
-            clear(context)
-            return
-        }
+        if (value.isNullOrBlank()) return
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
