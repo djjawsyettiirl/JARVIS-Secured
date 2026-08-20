@@ -46,8 +46,8 @@ jobs:
         shell: pwsh
         run: |
           @{
-            version = '1.6.0'
-            version_code = 1600000 + [int]'${{ github.run_number }}'
+            version = '1.6.1'
+            version_code = 1601000 + [int]'${{ github.run_number }}'
             commit = '${{ github.sha }}'
             run_id = '${{ github.run_id }}'
           } | ConvertTo-Json | Set-Content app/build/outputs/apk/release/android-build.json

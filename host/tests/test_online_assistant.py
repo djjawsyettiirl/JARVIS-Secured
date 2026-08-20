@@ -57,3 +57,19 @@ def test_unavailable_searxng_has_clear_setup_error(monkeypatch):
 
     assert response["needs_search_setup"] is True
     assert response["reply"].startswith("Internet search is unavailable")
+
+
+def test_search_caption_is_short_and_limited_to_three_results(monkeypatch):
+    assistant = OnlineAssistant()
+    monkeypatch.setattr(assistant, "serpapi_key", lambda: "")
+    monkeypatch.setattr(assistant, "_searxng", lambda _query: [
+        {"title": f"Result {index}", "url": f"https://example.com/{index}", "snippet": "x" * 200, "provider": "SearXNG"}
+        for index in range(4)
+    ])
+
+    response = assistant.ask("test")
+
+    assert len(response["sources"]) == 3
+    assert "Result 2" in response["reply"]
+    assert "Result 3" not in response["reply"]
+    assert "x" * 121 not in response["reply"]

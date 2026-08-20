@@ -2,7 +2,7 @@
 
 A secure, multi-device personal AI assistant. The Windows host is the primary node; Android devices pair to it using one-time enrollment codes and device-bound public-key authentication.
 
-## v1.6.0 capabilities
+## v1.6.1 capabilities
 
 - Windows host with FastAPI gateway
 - One-time, expiring pairing codes

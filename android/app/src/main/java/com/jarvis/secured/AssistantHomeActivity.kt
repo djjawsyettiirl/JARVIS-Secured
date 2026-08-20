@@ -13,6 +13,8 @@ import android.os.Looper
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.util.Base64
+import android.text.method.LinkMovementMethod
+import android.text.util.Linkify
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -136,6 +138,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         wrapper.addView(TextView(this).apply{
             text=body;textSize=16f;setTextColor(Color.parseColor("#F4F7FB"));setPadding(dp(15),dp(11),dp(15),dp(11));
             background=rounded(if(system)"#171C23" else if(mine)"#234F9B" else "#12171E",18,if(mine)null else "#242C36");maxWidth=(resources.displayMetrics.widthPixels*.82f).toInt()
+            autoLinkMask=Linkify.WEB_URLS;linksClickable=true;movementMethod=LinkMovementMethod.getInstance();setLinkTextColor(Color.parseColor("#79AEFF"))
         })
         conversation.addView(wrapper,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));conversationScroll.post{conversationScroll.fullScroll(View.FOCUS_DOWN)}
     }
@@ -260,12 +263,12 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val results=data.optJSONArray("organic_results")?:return@use null
                 buildString {
                     append("Web results via SerpAPI:")
-                    for(i in 0 until minOf(5,results.length())) {
+                    for(i in 0 until minOf(3,results.length())) {
                         val item=results.optJSONObject(i)?:continue
                         val link=item.optString("link")
                         if(link.isBlank())continue
                         append("\n\n").append(i+1).append(". ").append(item.optString("title",link))
-                        item.optString("snippet").takeIf{it.isNotBlank()}?.let{append(" — ").append(it.take(260))}
+                        item.optString("snippet").takeIf{it.isNotBlank()}?.let{append(" — ").append(it.take(120))}
                         append("\n").append(link)
                     }
                 }.takeIf{it!="Web results via SerpAPI:"}

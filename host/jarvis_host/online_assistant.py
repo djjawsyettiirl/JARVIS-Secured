@@ -162,14 +162,14 @@ class OnlineAssistant:
 
         provider_name = "SearXNG" if provider == "searxng" else "SerpAPI"
         lines = [f"Web results via {provider_name}:"]
-        for index, item in enumerate(results[:5], 1):
-            snippet = item["snippet"][:260].strip()
+        for index, item in enumerate(results[:3], 1):
+            snippet = item["snippet"][:120].strip()
             lines.append(
                 f"{index}. {item['title']}"
                 + (f" — {snippet}" if snippet else "")
                 + f"\n{item['url']}"
             )
-        return {"reply": "\n\n".join(lines), "sources": results, "search_provider": provider_name, "action": None}
+        return {"reply": "\n\n".join(lines), "sources": results[:3], "search_provider": provider_name, "action": None}
 
 
 online_assistant = OnlineAssistant()
