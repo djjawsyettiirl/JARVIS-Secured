@@ -150,7 +150,7 @@ def test_android_artifact_identity_must_match_selected_commit(monkeypatch, tmp_p
         pending = tmp_path / "android-next"
         (pending / "app-release.apk").write_bytes(b"apk")
         (pending / "android-build.json").write_text(
-            json.dumps({"version": "1.6.1", "version_code": 1601001, "commit": "old"}),
+            json.dumps({"version": "1.7.0", "version_code": 1700001, "commit": "old"}),
             encoding="utf-8",
         )
         return ""

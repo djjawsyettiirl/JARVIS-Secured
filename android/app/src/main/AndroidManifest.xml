@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <application
@@ -18,18 +20,38 @@
         android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:supportsRtl="true">
-        <activity android:name=".AssistantHomeActivity" android:exported="true" android:label="Assistant Jarvis">
+        <activity android:name=".AssistantHomeActivity" android:exported="true" android:launchMode="singleTop" android:label="Assistant Jarvis">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".MainActivity" android:exported="false" android:label="Assistant Jarvis Settings" />
+        <activity android:name=".MainActivity" android:exported="true" android:label="Assistant Jarvis Settings" />
         <activity android:name=".ConnectionManagerActivity" android:exported="false" android:label="Assistant Jarvis Connections" />
         <service
             android:name=".RoutePushService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".AlwaysListeningService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <service
+            android:name=".JarvisVoiceInteractionService"
+            android:exported="true"
+            android:label="Assistant Jarvis"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/voice_interaction_service" />
+        </service>
+        <service
+            android:name=".JarvisVoiceInteractionSessionService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -188,7 +188,7 @@ class Updater:
             raise RuntimeError("The Android artifact commit does not match the selected build")
         if str(build.get("version", "")) != VERSION:
             raise RuntimeError(f"The Android artifact version is {build.get('version', 'unknown')}, expected {VERSION}")
-        if int(build.get("version_code", 0)) < 1_601_000:
+        if int(build.get("version_code", 0)) < 1_700_000:
             raise RuntimeError("The Android artifact version code is outdated")
         (pending / ".run-id").write_text(str(run["databaseId"]), encoding="utf-8")
         self._archive_existing(target, "android-update")

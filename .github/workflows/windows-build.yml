@@ -24,7 +24,7 @@ jobs:
       - name: Stamp private build identity
         shell: pwsh
         run: |
-          @{ version = '1.6.1'; commit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content host/build-info.json
+          @{ version = '1.7.0'; commit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content host/build-info.json
       - name: Bundle Windows speech engine
         shell: pwsh
         run: |
@@ -50,7 +50,7 @@ jobs:
           Copy-Item dist/JARVIS.exe package/JARVIS.exe
           Copy-Item dist/JARVIS-Updater.exe package/JARVIS-Updater.exe
           @'
-          JARVIS for Windows v1.6.1
+          JARVIS for Windows v1.7.0
 
           Run JARVIS.exe. It opens as a standalone Windows desktop application.
           The secure host, dashboard, and Cloudflare tunnel run inside the app.

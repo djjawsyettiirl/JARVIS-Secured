@@ -1,6 +1,7 @@
 package com.jarvis.secured
 
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.Intent
 import android.content.Context
 import android.content.pm.PackageManager
@@ -13,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.location.LocationManager
 import android.provider.Settings
 import android.speech.RecognizerIntent
@@ -78,6 +80,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var status: TextView
     private lateinit var spokenName: EditText
     private lateinit var permissionStatus: TextView
+    private lateinit var voiceActivationStatus: TextView
     private lateinit var scopesStatus: TextView
     private lateinit var assistantInput: EditText
     private lateinit var assistantReply: TextView
@@ -91,6 +94,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var updatePolling = false
     @Volatile private var updateCheckInProgress = false
     @Volatile private var reconnectInProgress = false
+    private var enableListeningAfterPermission = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,6 +115,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         if (::permissionStatus.isInitialized) refreshPermissions()
+        if (::voiceActivationStatus.isInitialized) refreshVoiceActivationStatus()
     }
 
     private fun buildUi() {
@@ -185,6 +190,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setPadding(0, dp(2), 0, dp(14))
         }
         permissionStatus = TextView(this).apply { textSize = 14f; setTextColor(textMuted) }
+        voiceActivationStatus = TextView(this).apply { textSize = 14f; setTextColor(textMuted) }
         val request = styleButton(Button(this).apply {
             text = "Review permissions"
             setOnClickListener { requestAllPermissions() }
@@ -219,6 +225,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val ask = styleButton(Button(this).apply { text = "Ask JARVIS"; setOnClickListener { askJarvis() } })
         val speak = styleButton(Button(this).apply { text = "🎙 Speak"; setOnClickListener { startVoiceInput() } }, true)
         val update = styleButton(Button(this).apply { text = "Check private update"; setOnClickListener { installPrivateUpdate(false) } })
+        val enableListening = styleButton(Button(this).apply {
+            text = "Enable always listening"
+            setOnClickListener { enableAlwaysListening() }
+        })
+        val stopListening = styleButton(Button(this).apply {
+            text = "Stop listening"
+            setOnClickListener { AlwaysListeningService.stop(this@MainActivity); refreshVoiceActivationStatus() }
+        }, true)
+        val defaultAssistant = styleButton(Button(this).apply {
+            text = "Set as default assistant"
+            setOnClickListener { requestAssistantRole() }
+        })
+        val batterySettings = styleButton(Button(this).apply {
+            text = "Allow background battery use"
+            setOnClickListener { requestBatteryExemption() }
+        }, true)
         assistantReply = TextView(this).apply {
             text = "Pair with the Windows host to begin."
             textSize = 16f
@@ -249,6 +271,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             card("Assistant", "Type a request or speak naturally.", assistantInput, actionRow(ask, speak), assistantReply),
             card("Home inbox", "Messages and shared locations from Windows.", inboxInput, sendInbox, inboxMessages),
             card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
+            card("Voice activation", "Optional. Keeps the microphone active behind a persistent notification. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListening, stopListening), actionRow(defaultAssistant, batterySettings)),
             card("App settings", "Permissions and private releases.", permissionStatus, actionRow(request, settings), update)
         ).forEach { section ->
             root.addView(section, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -257,6 +280,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(root) }
         setContentView(scroll)
+        refreshVoiceActivationStatus()
     }
 
     private fun permissionRequests(): Array<String> {
@@ -299,7 +323,66 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST) refreshPermissions()
+        if (requestCode == PERMISSION_REQUEST) {
+            refreshPermissions()
+            if (enableListeningAfterPermission) {
+                enableListeningAfterPermission = false
+                enableAlwaysListening()
+            }
+        }
+    }
+
+    private fun enableAlwaysListening() {
+        if (getSharedPreferences("jarvis", MODE_PRIVATE).getString("device_id", null).isNullOrBlank()) {
+            voiceActivationStatus.text = "Pair this phone with the Windows host first."
+            return
+        }
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) needed.add(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) needed.add(Manifest.permission.POST_NOTIFICATIONS)
+        if (needed.isNotEmpty()) {
+            enableListeningAfterPermission = true
+            requestPermissions(needed.toTypedArray(), PERMISSION_REQUEST)
+            return
+        }
+        runCatching { AlwaysListeningService.start(this) }
+            .onSuccess { voiceActivationStatus.text = "Always listening: ON\nSay “Jarvis” followed by your command." }
+            .onFailure { voiceActivationStatus.text = "Could not start listening: ${it.message}" }
+    }
+
+    private fun requestAssistantRole() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val roles = getSystemService(RoleManager::class.java)
+            if (roles.isRoleAvailable(RoleManager.ROLE_ASSISTANT)) {
+                if (roles.isRoleHeld(RoleManager.ROLE_ASSISTANT)) {
+                    voiceActivationStatus.text = "Default assistant: JARVIS"
+                } else startActivityForResult(roles.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT), ASSISTANT_ROLE_REQUEST)
+                return
+            }
+        }
+        runCatching { startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
+            .onFailure { voiceActivationStatus.text = "This phone does not expose a default-assistant picker." }
+    }
+
+    private fun requestBatteryExemption() {
+        val power = getSystemService(PowerManager::class.java)
+        if (Build.VERSION.SDK_INT < 23 || power.isIgnoringBatteryOptimizations(packageName)) {
+            voiceActivationStatus.text = "Background battery use: allowed"
+            return
+        }
+        runCatching { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))) }
+            .onFailure { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+    }
+
+    private fun refreshVoiceActivationStatus() {
+        if (!::voiceActivationStatus.isInitialized) return
+        val enabled = getSharedPreferences("jarvis", MODE_PRIVATE).getBoolean(AlwaysListeningService.PREF_ENABLED, false)
+        val assistant = if (Build.VERSION.SDK_INT >= 29) {
+            val roles = getSystemService(RoleManager::class.java)
+            roles.isRoleAvailable(RoleManager.ROLE_ASSISTANT) && roles.isRoleHeld(RoleManager.ROLE_ASSISTANT)
+        } else false
+        val battery = if (Build.VERSION.SDK_INT >= 23) getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName) else true
+        voiceActivationStatus.text = "Always listening: ${if (enabled) "ON" else "OFF"}\nDefault assistant: ${if (assistant) "JARVIS" else "not selected"}\nBackground battery use: ${if (battery) "allowed" else "system managed"}"
     }
 
     private fun ensureKeyPair() {
@@ -798,6 +881,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 askJarvis()
             }
         }
+        if (requestCode == ASSISTANT_ROLE_REQUEST) refreshVoiceActivationStatus()
     }
 
     override fun onInit(status: Int) {
@@ -818,5 +902,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val KEY_ALIAS = "jarvis-device-key"
         private const val PERMISSION_REQUEST = 1001
         private const val VOICE_REQUEST = 1002
+        private const val ASSISTANT_ROLE_REQUEST = 1003
     }
 }

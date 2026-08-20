@@ -63,6 +63,13 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         restoreQueuedMessages()
         tts = TextToSpeech(this, this)
         reconnect()
+        if (intent.getBooleanExtra("start_voice", false)) handler.postDelayed({ startVoice() }, 500)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("start_voice", false)) handler.postDelayed({ startVoice() }, 250)
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
