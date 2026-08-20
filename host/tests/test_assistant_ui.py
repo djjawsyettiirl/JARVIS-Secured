@@ -11,3 +11,11 @@ def test_assistant_ui_preserves_javascript_newline_escape():
     assert script is not None
     assert "paired devices\\n'+message" in script.group(1)
     assert "paired devices\n'+message" not in script.group(1)
+
+
+def test_assistant_ui_renders_up_to_three_clickable_sources():
+    html = assistant_v1_home()
+    assert "(data.sources||[]).slice(0,3)" in html
+    assert "link.href=source.url" in html
+    assert "link.target='_blank'" in html
+    assert "link.rel='noopener'" in html
