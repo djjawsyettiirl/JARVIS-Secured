@@ -100,7 +100,7 @@ class Updater:
     def _latest(self, workflow: str) -> dict[str, object] | None:
         output = self._run(
             "run", "list", "--repo", REPOSITORY, "--workflow", workflow,
-            "--branch", BRANCH, "--status", "success", "--limit", "1",
+            "--branch", BRANCH, "--event", "push", "--status", "success", "--limit", "1",
             "--json", "databaseId,headSha,createdAt,url",
         )
         runs = json.loads(output)

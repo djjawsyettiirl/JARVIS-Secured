@@ -48,6 +48,15 @@ def test_private_update_commands_use_hidden_process_options(monkeypatch):
     assert captured["kwargs"]["startupinfo"] == "hidden"
 
 
+def test_latest_build_selection_excludes_pull_request_artifacts(monkeypatch):
+    updater = Updater()
+    captured = []
+    monkeypatch.setattr(updater, "_run", lambda *args: captured.extend(args) or "[]")
+
+    assert updater._latest("android-build.yml") is None
+    assert captured[captured.index("--event") + 1] == "push"
+
+
 def test_stale_android_apk_is_not_reported_ready(monkeypatch, tmp_path):
     updater = Updater()
     monkeypatch.setattr(type(updater), "update_dir", property(lambda self: tmp_path))
