@@ -569,12 +569,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         val token = sessionToken
         if (token == null) {
-            OfflineCapabilities.launch(this, message)?.let { assistantReply.text = "Limited mode · $it"; return }
-            assistantReply.text = OfflineCapabilities.status(this)
-            Thread {
-                val reply = DirectSerpApiSearch.search(this, message)
-                runOnUiThread { assistantReply.text = reply ?: "Limited mode could not complete that request." }
-            }.start()
+            assistantReply.text = "Pair or reconnect to the Windows host first."
             return
         }
         val baseUrl = host.text.toString().trim().trimEnd('/')
@@ -603,7 +598,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (message.isEmpty()) return
         val token = sessionToken
         if (token == null) {
-            assistantReply.text = "Pair or reconnect to the Windows host first."
+            OfflineCapabilities.launch(this, message)?.let { assistantReply.text = "Limited mode · $it"; return }
+            assistantReply.text = OfflineCapabilities.status(this)
+            Thread {
+                val reply = DirectSerpApiSearch.search(this, message)
+                runOnUiThread { assistantReply.text = reply ?: "Limited mode could not complete that request." }
+            }.start()
             return
         }
         val baseUrl = host.text.toString().trim().trimEnd('/')
