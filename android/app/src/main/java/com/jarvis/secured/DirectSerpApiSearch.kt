@@ -1,6 +1,7 @@
 package com.jarvis.secured
 
 import android.content.Context
+import android.net.Uri
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -34,6 +35,10 @@ object DirectSerpApiSearch {
                     }
                 }.takeIf { it != "Limited mode · $label results via SerpAPI:" }
             }
-        }.getOrNull()
+        }.getOrNull() ?: if (searchType in setOf("images", "videos")) {
+            val label = if (searchType == "images") "Images" else "Videos"
+            val tab = if (searchType == "images") "isch" else "vid"
+            "Limited mode · No embedded ${label.lowercase()} matched. Open all $label:\nhttps://www.google.com/search?tbm=$tab&q=${Uri.encode(query)}"
+        } else null
     }
 }

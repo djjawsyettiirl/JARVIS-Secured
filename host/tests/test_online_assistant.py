@@ -87,3 +87,17 @@ def test_image_search_returns_typed_results(monkeypatch):
     assert response["search_type"] == "images"
     assert response["sources"][0]["thumbnail"].endswith("thumb.jpg")
     assert response["reply"].startswith("Image results")
+
+
+def test_empty_image_search_offers_clickable_full_search(monkeypatch):
+    assistant = OnlineAssistant()
+    monkeypatch.setattr(assistant, "serpapi_key", lambda: "configured-key-value")
+    monkeypatch.setattr(assistant, "_searxng", lambda _query, search_type="web": [])
+    monkeypatch.setattr(assistant, "_serpapi", lambda _query, search_type="web": [])
+
+    response = assistant.ask("unusual image request", "images")
+
+    assert response["search_type"] == "images"
+    assert response["sources"][0]["url"].startswith("https://www.google.com/search?tbm=isch")
+    assert response.get("needs_search_setup") is None
+    assert "Internet search is unavailable" not in response["reply"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from urllib.parse import quote_plus
 
 import httpx
 import keyring
@@ -166,6 +167,26 @@ class OnlineAssistant:
         try:
             results, provider = self.search(message, search_type)
         except Exception as exc:
+            if search_type in {"images", "videos"}:
+                label = "Images" if search_type == "images" else "Videos"
+                url = "https://www.google.com/search?" + (
+                    f"tbm={'isch' if search_type == 'images' else 'vid'}&q={quote_plus(message)}"
+                )
+                source = {
+                    "title": f"Open all {label.lower()} for {message}",
+                    "url": url,
+                    "snippet": f"Continue in Google {label}",
+                    "provider": "Google",
+                    "type": search_type,
+                    "thumbnail": "",
+                }
+                return {
+                    "reply": f"No embedded {label.lower()} matched that request. Open the full {label} search below.",
+                    "sources": [source],
+                    "search_provider": "Google",
+                    "search_type": search_type,
+                    "action": None,
+                }
             return {
                 "reply": f"Internet search is unavailable right now: {exc}",
                 "action": None,
