@@ -15,7 +15,12 @@ class JarvisApplication : Application(), Application.ActivityLifecycleCallbacks 
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-        if (!pushStarted) {
+        val prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
+        val pushReady = !prefs.getString("device_id", null).isNullOrBlank() &&
+            !prefs.getString("route_broker", null).isNullOrBlank() &&
+            !prefs.getString("route_topic", null).isNullOrBlank() &&
+            !prefs.getString("route_secret", null).isNullOrBlank()
+        if (!pushStarted && pushReady) {
             pushStarted = true
             runCatching { RoutePushService.start(this) }
         }

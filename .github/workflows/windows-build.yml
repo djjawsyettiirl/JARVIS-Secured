@@ -15,6 +15,8 @@ jobs:
           python-version: '3.12'
       - name: Install host dependencies
         run: python -m pip install --upgrade pip && pip install -r host/requirements.txt pyinstaller
+      - name: Run host tests
+        run: python -m pytest host/tests -q
       - name: Download Cloudflare tunnel client
         shell: pwsh
         run: |
@@ -24,7 +26,7 @@ jobs:
       - name: Stamp private build identity
         shell: pwsh
         run: |
-          @{ version = '1.8.0'; commit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content host/build-info.json
+          @{ version = '1.8.1'; commit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content host/build-info.json
       - name: Bundle Windows speech engine
         shell: pwsh
         run: |
@@ -50,7 +52,7 @@ jobs:
           Copy-Item dist/JARVIS.exe package/JARVIS.exe
           Copy-Item dist/JARVIS-Updater.exe package/JARVIS-Updater.exe
           @'
-          JARVIS for Windows v1.8.0
+          JARVIS for Windows v1.8.1
 
           Run JARVIS.exe. It opens as a standalone Windows desktop application.
           The secure host, dashboard, and Cloudflare tunnel run inside the app.

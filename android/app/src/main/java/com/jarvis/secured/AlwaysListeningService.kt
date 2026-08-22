@@ -41,7 +41,7 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     }
 
     private fun beginListening(delay: Long = 350) {
-        if (stopping || ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        if (stopping || processing || ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
         android.os.Handler(mainLooper).postDelayed({
             if (stopping) return@postDelayed
             if (recognizer == null) {
@@ -139,7 +139,7 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
     override fun onEndOfSpeech() = Unit
-    override fun onError(error: Int) = restartListening(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 1200 else 500)
+    override fun onError(error: Int) { if (!processing && !stopping) restartListening(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 1200 else 500) }
     override fun onResults(results: Bundle?) { handlePhrases(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()); if (!awaitingCommand && !processing) beginListening() }
     override fun onPartialResults(partialResults: Bundle?) = Unit
     override fun onEvent(eventType: Int, params: Bundle?) = Unit

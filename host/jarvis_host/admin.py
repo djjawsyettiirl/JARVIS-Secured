@@ -20,6 +20,10 @@ from .version import VERSION
 admin_app = FastAPI(title="JARVIS Host Control Panel", version=VERSION)
 store = Store()
 current_pairing_code = ""
+VISIBLE_SCOPES = {
+    "chat", "google_gmail", "google_calendar", "maps", "alarms",
+    "messaging", "location_share", "software_updates", "offline_search",
+}
 
 
 class AssistantRequest(BaseModel):
@@ -95,7 +99,7 @@ def dashboard():
         route = device["last_route"] or "unknown"
         boxes = " ".join(
             f"<label><input type='checkbox' name='scope' value='{s}' {_checked(scopes, s)}> {s}</label>"
-            for s in ALL_SCOPES if s != "admin"
+            for s in ALL_SCOPES if s in VISIBLE_SCOPES
         )
         revoke_button = "" if device["revoked"] else f"<form method='post' action='/devices/{escape(device['device_id'])}/revoke'><button class='danger'>Revoke</button></form>"
         forget_button = f"<form method='post' action='/devices/{escape(device['device_id'])}/delete' onsubmit=\"return confirm('Permanently forget this paired device?');\"><button class='secondary'>Forget permanently</button></form>"
@@ -127,6 +131,7 @@ button{{border:1px solid transparent;border-radius:10px;padding:10px 15px;backgr
 input{{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:11px;padding:11px 13px;font-size:15px}}input:focus{{outline:2px solid #3979ef77;border-color:#4d8cff}}input.assistant{{width:min(760px,100%)}}.compose{{display:flex;gap:8px;align-items:center}}.compose input{{flex:1}}
 #assistantReply{{white-space:pre-wrap;line-height:1.55;background:#0a111b;border-radius:12px;padding:14px;min-height:52px}}#homeInbox{{max-height:270px;overflow:auto;margin-top:12px;padding-right:6px}}#homeInbox p{{background:#0a111b;border-radius:12px;padding:10px 12px;margin:7px 0}}.listening{{background:#a12c48}}
 details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--line);border-radius:18px;padding:4px 18px 18px}}details.advanced>summary{{cursor:pointer;padding:16px 2px;font-weight:700;color:#b9c9dc;list-style:none}}details.advanced>summary:before{{content:'›';display:inline-block;margin-right:10px;transition:transform .2s}}details[open]>summary:before{{transform:rotate(90deg)}}
+.unused-feature{{display:none!important}}
 @media(max-width:850px){{body{{padding:16px}}.dashboard,.settings-grid{{grid-template-columns:1fr}}.hero,.full{{grid-column:auto}}.route-grid{{grid-template-columns:1fr}}.app-header{{align-items:flex-start;flex-direction:column}}}}
 </style></head><body>
 <header class='app-header'><div class='brand'><div class='orb'></div><div><h1>JARVIS</h1><div class='small'>Windows voice assistant · v{VERSION}</div></div></div><span class='{online_class} badge'>Remote {escape(tunnel.status)}</span></header>
@@ -141,16 +146,16 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 
 <div class='card'><h2>Internet search</h2>
 <span id='searchBadge' class='warn badge'>Checking…</span>
-<p class='small'>JARVIS prefers your private SearXNG server and automatically falls back to SerpAPI when SearXNG is unavailable.</p>
-<input id='searxngUrl' class='assistant' type='url' placeholder='http://127.0.0.1:8080' autocomplete='url'>
+<p class='small'>Internet search currently uses SerpAPI.</p>
+<span class='unused-feature'><input id='searxngUrl' class='assistant' type='url' placeholder='http://127.0.0.1:8080' autocomplete='url'>
 <button type='button' onclick='saveSearxng()'>Save and test SearXNG</button>
-<button class='danger' type='button' onclick='removeSearxng()'>Use local default</button>
+<button class='danger' type='button' onclick='removeSearxng()'>Use local default</button></span>
 <p><input id='serpapiKey' class='assistant' type='password' placeholder='SerpAPI key' autocomplete='new-password'>
 <button type='button' onclick='saveSerpApi()'>Save and test SerpAPI</button>
 <button class='danger' type='button' onclick='removeSerpApi()'>Remove SerpAPI key</button></p>
 <p id='searchDetail' class='small'></p></div>
 
-<div class='card'><h2>Google account</h2>
+<div class='card unused-feature'><h2>Google account</h2>
 <span id='googleBadge' class='warn badge'>Checking…</span>
 <p id='googleDetail' class='small'></p>
 <button type='button' onclick='connectGoogle()'>Connect Google account</button>
@@ -182,10 +187,10 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 
 <div class='card'><h2>Remote connection</h2><span id='tunnelBadge' class='{online_class} badge'>Tunnel: {escape(tunnel.status)}</span><p id='tunnelError' class='error'>{escape(tunnel.last_error)}</p>
 <p id='tunnelMode' class='small'>Mode: {'Permanent named tunnel' if tunnel.named_configured() else 'Temporary quick tunnel'}</p>
-<input id='tunnelHostname' class='assistant' placeholder='https://jarvis.yourdomain.com' value='{escape(tunnel.named_hostname())}'>
+<span class='unused-feature'><input id='tunnelHostname' class='assistant' placeholder='https://jarvis.yourdomain.com' value='{escape(tunnel.named_hostname())}'>
 <input id='tunnelToken' class='assistant' type='password' placeholder='Cloudflare tunnel token (eyJ...)' autocomplete='off'>
 <button type='button' onclick='saveNamedTunnel()'>Use permanent tunnel</button>
-<button class='secondary' type='button' onclick='clearNamedTunnel()'>Return to temporary tunnel</button>
+<button class='secondary' type='button' onclick='clearNamedTunnel()'>Return to temporary tunnel</button></span>
 <form method='get' action='/'><button class='secondary'>Refresh status now</button></form>
 <form method='post' action='/tunnel/restart'><button>Restart remote tunnel</button></form>
 <p class='small'>The tunnel proxies only the secure JARVIS gateway on port 8765. The admin dashboard remains localhost-only.</p></div>
@@ -232,7 +237,7 @@ async function googleStatus() {{
 async function connectGoogle() {{ await fetch('/google/connect', {{method:'POST'}}); googleStatus(); }}
 async function disconnectGoogle() {{ await fetch('/google/disconnect', {{method:'POST'}}); googleStatus(); }}
 async function searchStatus() {{
-  try {{ const data = await (await fetch('/search/status')).json(); const ready = data.connected || data.serpapi_configured; const badge = document.getElementById('searchBadge'); badge.textContent = data.connected ? 'SearXNG connected' : (data.serpapi_configured ? 'SerpAPI fallback ready' : 'Search setup required'); badge.className = (ready ? 'online' : 'warn') + ' badge'; const searx = data.connected ? 'SearXNG connected: ' + data.url : 'SearXNG offline: ' + (data.error || data.url); const serp = data.serpapi_configured ? 'SerpAPI key saved as fallback.' : 'SerpAPI is not configured.'; document.getElementById('searchDetail').textContent = searx + ' ' + serp; }} catch (_) {{}}
+  try {{ const data = await (await fetch('/search/status')).json(); const ready = data.connected || data.serpapi_configured; const badge = document.getElementById('searchBadge'); badge.textContent = data.connected ? 'SearXNG connected' : (data.serpapi_configured ? 'SerpAPI ready' : 'Search setup required'); badge.className = (ready ? 'online' : 'warn') + ' badge'; document.getElementById('searchDetail').textContent = data.connected ? 'Private SearXNG search is ready.' : (data.serpapi_configured ? 'SerpAPI search is ready.' : 'Add a SerpAPI key to enable internet search.'); }} catch (_) {{}}
 }}
 async function saveSearxng() {{ const input = document.getElementById('searxngUrl'); const response = await fetch('/search/searxng', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{url:input.value}})}}); const data = await response.json(); if (!response.ok) alert(data.detail || 'Could not save SearXNG'); searchStatus(); }}
 async function removeSearxng() {{ await fetch('/search/searxng', {{method:'DELETE'}}); document.getElementById('searxngUrl').value=''; searchStatus(); }}
@@ -285,13 +290,13 @@ async function homeInbox() {{
     }}
     homeInboxInitialized = true;
     for (const item of incoming.reverse()) {{
-      const body = /https:\/\/www\.google\.com\/maps/.test(item.body) ? 'shared a location with you' : item.body;
+      const body = /https:\\/\\/www\\.google\\.com\\/maps/.test(item.body) ? 'shared a location with you' : item.body;
       await speak((item.sender_name || 'Paired device') + ' says: ' + body, true);
     }}
   }} catch (_) {{}}
 }}
 function escapeHtml(value) {{ const node = document.createElement('div'); node.textContent = value; return node.innerHTML; }}
-function linkify(value) {{ return value.replace(/(https:\/\/www\.google\.com\/maps[^\s<]*)/g, '<a href="$1" target="_blank" rel="noopener">Open location</a>'); }}
+function linkify(value) {{ return value.replace(/(https:\\/\\/www\\.google\\.com\\/maps[^\\s<]*)/g, '<a href="$1" target="_blank" rel="noopener">Open location</a>'); }}
 async function sendHomeMessage() {{
   const input = document.getElementById('homeMessage'); const body = input.value.trim(); if (!body) return;
   const response = await fetch('/messages/send', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{message:body}})}});
@@ -311,7 +316,7 @@ async function applyWindowsUpdate() {{
   const response = await fetch('/updates/apply-windows', {{method:'POST'}});
   if (!response.ok) {{ const data = await response.json(); alert(data.detail || 'Update failed'); }}
 }}
-googleStatus(); searchStatus(); tunnelStatus(); homeInbox(); updateStatus(); setInterval(googleStatus, 3000); setInterval(searchStatus, 10000); setInterval(tunnelStatus, 2000); setInterval(homeInbox, 2000); setInterval(updateStatus, 2000); setInterval(checkAlarms, 1000);
+searchStatus(); tunnelStatus(); homeInbox(); updateStatus(); setInterval(searchStatus, 30000); setInterval(tunnelStatus, 10000); setInterval(homeInbox, 5000); setInterval(updateStatus, 10000); setInterval(checkAlarms, 2000);
 </script>
 </body></html>"""
 

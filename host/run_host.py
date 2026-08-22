@@ -16,6 +16,7 @@ from jarvis_host import route_rendezvous
 from jarvis_host import assistant_ui
 from jarvis_host.google_account import data_dir
 from jarvis_host.version import VERSION
+from jarvis_host.single_instance import acquire as acquire_single_instance
 
 app.include_router(route_rendezvous.router)
 admin_app.include_router(assistant_ui.router)
@@ -82,6 +83,8 @@ def main() -> None:
     if os.environ.get("JARVIS_SMOKE_TEST") == "1":
         from jarvis_host.windows_voice import windows_voice
         windows_voice.validate()
+        return
+    if not acquire_single_instance():
         return
     _startup_log("host startup began")
     code = store.create_pairing()

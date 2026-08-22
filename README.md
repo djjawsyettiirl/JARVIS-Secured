@@ -2,7 +2,11 @@
 
 A secure, multi-device personal AI assistant. The Windows host is the primary node; Android devices pair to it using one-time enrollment codes and device-bound public-key authentication.
 
-## v1.8.0 capabilities
+## v1.8.1 capabilities
+
+- Removes unused Android Camera and Nearby Devices permission requests and makes location permission feature-triggered.
+- Prevents wake-listening microphone restarts while JARVIS is speaking and avoids idle route-push services before pairing.
+- Hides dormant UI controls without deleting their implementations and prevents genuine duplicate Windows host launches.
 
 - Seven separately controlled Android awareness categories: device, location, personal context, screen context, home devices, private memory, and proactive alerts.
 - Sensitive awareness data stays on the phone by default; direct context questions and proactive reminders are handled locally.

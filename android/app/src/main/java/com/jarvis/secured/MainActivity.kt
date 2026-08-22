@@ -205,6 +205,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 setOnCheckedChangeListener { _, checked ->
                     AwarenessManager.setEnabled(this@MainActivity, key, checked)
                     if (checked && key == AwarenessManager.SCREEN) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    if (checked && key == AwarenessManager.LOCATION && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), PERMISSION_REQUEST)
                     if (checked && key == AwarenessManager.PERSONAL && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED)
                         requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), PERMISSION_REQUEST)
                     refreshAwarenessStatus()
@@ -288,8 +290,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         root.addView(title)
         root.addView(subtitle)
         listOf(
-            card("Assistant", "Type a request or speak naturally.", assistantInput, actionRow(ask, speak), assistantReply),
-            card("Home inbox", "Messages and shared locations from Windows.", inboxInput, sendInbox, inboxMessages),
             card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
             card("Voice activation", "Automatic when JARVIS is your default assistant. Otherwise, you can enable wake listening manually. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListeningButton, stopListeningButton), actionRow(defaultAssistantButton, batterySettings)),
             card("Awareness", "Each category is private, separately controlled, and handled on this phone. Sensitive context is not silently sent to the host.", awarenessStatus, awarenessControls),
@@ -306,12 +306,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun permissionRequests(): Array<String> {
-        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION)
+        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= 33) permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        if (Build.VERSION.SDK_INT >= 31) {
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-        }
         return permissions.toTypedArray()
     }
 
@@ -345,19 +341,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (!::permissionStatus.isInitialized) return
         val lines = mutableListOf(
             permissionLabel(Manifest.permission.RECORD_AUDIO, "Microphone"),
-            permissionLabel(Manifest.permission.CAMERA, "Camera"),
-            permissionLabel(Manifest.permission.ACCESS_FINE_LOCATION, "Location sharing")
+            permissionLabel(Manifest.permission.ACCESS_FINE_LOCATION, "Location awareness (optional)")
         )
         lines.add(permissionLabel(Manifest.permission.READ_CALENDAR, "Calendar awareness (optional)"))
         if (Build.VERSION.SDK_INT >= 33) lines.add(permissionLabel(Manifest.permission.POST_NOTIFICATIONS, "Notifications"))
-        if (Build.VERSION.SDK_INT >= 31) {
-            lines.add(permissionLabel(Manifest.permission.BLUETOOTH_SCAN, "Nearby devices / scan"))
-            lines.add(permissionLabel(Manifest.permission.BLUETOOTH_CONNECT, "Nearby devices / connect"))
-        }
         val installs = Build.VERSION.SDK_INT < 26 || packageManager.canRequestPackageInstalls()
-        val battery = Build.VERSION.SDK_INT < 23 || getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+        val voiceBackgroundEnabled = AlwaysListeningService.isDefaultAssistant(this) || AlwaysListeningService.isManuallyEnabled(this)
+        val battery = !voiceBackgroundEnabled || Build.VERSION.SDK_INT < 23 || getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
         lines.add("Private update installation: ${if (installs) "ALLOWED" else "ACTION NEEDED"}")
-        lines.add("Background battery use: ${if (battery) "UNRESTRICTED" else "ACTION NEEDED"}")
+        lines.add("Background battery use: ${if (!voiceBackgroundEnabled) "NOT NEEDED" else if (battery) "UNRESTRICTED" else "ACTION NEEDED"}")
         lines.add("Default assistant: ${if (AlwaysListeningService.isDefaultAssistant(this)) "JARVIS" else "OPTIONAL / NOT SELECTED"}")
         val runtimeReady = permissionRequests().all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
         permissionStatus.text = "Permission readiness: ${if (runtimeReady && installs && battery) "COMPLETE" else "ACTION NEEDED"}\n" + lines.joinToString("\n")
