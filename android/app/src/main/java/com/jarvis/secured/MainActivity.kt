@@ -195,7 +195,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         permissionStatus = TextView(this).apply { textSize = 14f; setTextColor(textMuted) }
         voiceActivationStatus = TextView(this).apply { textSize = 14f; setTextColor(textMuted) }
         val request = styleButton(Button(this).apply {
-            text = "Review permissions"
+            text = "Complete permission setup"
             setOnClickListener { requestAllPermissions() }
         })
         val settings = styleButton(Button(this).apply {
@@ -275,7 +275,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             card("Home inbox", "Messages and shared locations from Windows.", inboxInput, sendInbox, inboxMessages),
             card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
             card("Voice activation", "Automatic when JARVIS is your default assistant. Otherwise, you can enable wake listening manually. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListeningButton, stopListeningButton), actionRow(defaultAssistantButton, batterySettings)),
-            card("App settings", "Permissions and private releases.", permissionStatus, actionRow(request, settings), update)
+            card("App permissions", "Only access required by JARVIS features is requested. The setup button advances through any missing Android grants.", permissionStatus, actionRow(request, settings), update)
         ).forEach { section ->
             root.addView(section, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(14)
@@ -300,8 +300,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val pending = permissionRequests().filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (pending.isNotEmpty()) requestPermissions(pending.toTypedArray(), PERMISSION_REQUEST)
-        else refreshPermissions()
+        if (pending.isNotEmpty()) {
+            requestPermissions(pending.toTypedArray(), PERMISSION_REQUEST)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            return
+        }
+        val power = getSystemService(PowerManager::class.java)
+        if (Build.VERSION.SDK_INT >= 23 && !power.isIgnoringBatteryOptimizations(packageName)) {
+            requestBatteryExemption()
+            return
+        }
+        refreshPermissions()
+        assistantReply.text = "JARVIS has all required Android permissions and special access."
     }
 
     private fun permissionLabel(permission: String, label: String): String {
@@ -321,7 +334,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             lines.add(permissionLabel(Manifest.permission.BLUETOOTH_SCAN, "Nearby devices / scan"))
             lines.add(permissionLabel(Manifest.permission.BLUETOOTH_CONNECT, "Nearby devices / connect"))
         }
-        permissionStatus.text = "Permissions\n" + lines.joinToString("\n")
+        val installs = Build.VERSION.SDK_INT < 26 || packageManager.canRequestPackageInstalls()
+        val battery = Build.VERSION.SDK_INT < 23 || getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+        lines.add("Private update installation: ${if (installs) "ALLOWED" else "ACTION NEEDED"}")
+        lines.add("Background battery use: ${if (battery) "UNRESTRICTED" else "ACTION NEEDED"}")
+        lines.add("Default assistant: ${if (AlwaysListeningService.isDefaultAssistant(this)) "JARVIS" else "OPTIONAL / NOT SELECTED"}")
+        val runtimeReady = permissionRequests().all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
+        permissionStatus.text = "Permission readiness: ${if (runtimeReady && installs && battery) "COMPLETE" else "ACTION NEEDED"}\n" + lines.joinToString("\n")
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

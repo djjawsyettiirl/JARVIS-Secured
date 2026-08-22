@@ -35,6 +35,8 @@ With the `offline_search` device capability enabled, JARVIS transfers the SerpAP
 
 When JARVIS is selected as Android's default assistant, wake listening is automatic and managed by the system assistant role. Android intentionally offers microphone access as **Allow only while using the app**; the active assistant role and foreground listening notification provide the supported persistent path. Manual Enable/Stop controls appear only when JARVIS is not the default assistant.
 
+The Android permission-readiness panel checks microphone, notifications, camera, precise location, nearby-device scanning/connection, private APK installation, and unrestricted background battery use. It intentionally does not request unrelated contacts, call-log, SMS, or storage access. Maps, email composition, and Calendar event creation use Android's secure app intents rather than reading those apps' private data.
+
 ### Important
 
 This build allows cleartext HTTP only to make the first LAN test easy. It is **not** an internet deployment. Do not port-forward 8765 or expose this development listener to the public internet. The next milestone is TLS/WSS, short-lived sessions, and scoped permissions.
