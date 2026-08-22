@@ -2,9 +2,9 @@
 
 A secure, multi-device personal AI assistant. The Windows host is the primary node; Android devices pair to it using one-time enrollment codes and device-bound public-key authentication.
 
-## v1.8.3 capabilities
+## v1.8.4 capabilities
 
-- Background voice activation yields the microphone while another Android app is recording, then resumes safely after it releases the microphone.
+- Background voice activation tracks its own Android recording session, yields while another app records, and resumes without recursive cancel/restart loops.
 - Serializes Android wake-listener restarts and suspends recognition during every JARVIS spoken response.
 
 - Removes unused Android Camera and Nearby Devices permission requests and makes location permission feature-triggered.

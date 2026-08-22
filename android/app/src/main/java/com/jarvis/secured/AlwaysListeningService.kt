@@ -31,17 +31,25 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     private var awaitingCommand = false
     @Volatile private var processing = false
     @Volatile private var anotherAppRecording = false
+    private var ownRecordingSessionId: Int? = null
+    private var recognitionStartPending = false
     private lateinit var audioManager: AudioManager
     private val mainHandler = Handler(Looper.getMainLooper())
     private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>?) {
             val activeRecordings = configs.orEmpty()
-            val occupied = activeRecordings.size > 1 ||
-                (android.os.Build.VERSION.SDK_INT >= 29 && activeRecordings.any { it.isClientSilenced })
+            if (recognitionStartPending && activeRecordings.size == 1) {
+                ownRecordingSessionId = activeRecordings.first().clientAudioSessionId
+                recognitionStartPending = false
+            }
+            val ownSession = ownRecordingSessionId
+            val occupied = activeRecordings.any { ownSession == null || it.clientAudioSessionId != ownSession } ||
+                (android.os.Build.VERSION.SDK_INT >= 29 && activeRecordings.any { it.clientAudioSessionId == ownSession && it.isClientSilenced })
             if (occupied == anotherAppRecording) return
             anotherAppRecording = occupied
             mainHandler.post {
                 if (occupied) {
+                    recognitionStartPending = false
                     mainHandler.removeCallbacks(startListening)
                     recognizer?.cancel()
                     updateNotification("Paused while another app uses the microphone")
@@ -65,7 +73,11 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
         }
-        runCatching { recognizer?.startListening(intent) }.onFailure { restartListening(1000) }
+        recognitionStartPending = true
+        runCatching { recognizer?.startListening(intent) }.onFailure {
+            recognitionStartPending = false
+            restartListening(1500)
+        }
     }
 
     override fun onCreate() {
@@ -92,7 +104,6 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     private fun restartListening(delay: Long = 450) {
         if (stopping || processing || anotherAppRecording) return
         mainHandler.removeCallbacks(startListening)
-        recognizer?.cancel()
         beginListening(delay)
     }
 
@@ -182,7 +193,17 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
     override fun onEndOfSpeech() = Unit
-    override fun onError(error: Int) { if (!processing && !stopping) restartListening(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 1200 else 500) }
+    override fun onError(error: Int) {
+        recognitionStartPending = false
+        if (processing || stopping || anotherAppRecording) return
+        val delay = when (error) {
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 3000L
+            SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER, SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> 5000L
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> return
+            else -> 1000L
+        }
+        restartListening(delay)
+    }
     override fun onResults(results: Bundle?) { handlePhrases(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()); if (!awaitingCommand && !processing) beginListening() }
     override fun onPartialResults(partialResults: Bundle?) = Unit
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
