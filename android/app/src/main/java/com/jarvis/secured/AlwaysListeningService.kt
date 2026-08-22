@@ -15,7 +15,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.Process
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -36,7 +35,9 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     private val mainHandler = Handler(Looper.getMainLooper())
     private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>?) {
-            val occupied = configs.orEmpty().any { it.clientUid != Process.myUid() }
+            val activeRecordings = configs.orEmpty()
+            val occupied = activeRecordings.size > 1 ||
+                (android.os.Build.VERSION.SDK_INT >= 29 && activeRecordings.any { it.isClientSilenced })
             if (occupied == anotherAppRecording) return
             anotherAppRecording = occupied
             mainHandler.post {
