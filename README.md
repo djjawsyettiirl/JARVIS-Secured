@@ -2,7 +2,9 @@
 
 A secure, multi-device personal AI assistant. The Windows host is the primary node; Android devices pair to it using one-time enrollment codes and device-bound public-key authentication.
 
-## v1.8.1 capabilities
+## v1.8.2 capabilities
+
+- Serializes Android wake-listener restarts and suspends recognition during every JARVIS spoken response.
 
 - Removes unused Android Camera and Nearby Devices permission requests and makes location permission feature-triggered.
 - Prevents wake-listening microphone restarts while JARVIS is speaking and avoids idle route-push services before pairing.

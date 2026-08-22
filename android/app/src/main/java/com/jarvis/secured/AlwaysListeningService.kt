@@ -10,7 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -25,7 +27,23 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     private var tts: TextToSpeech? = null
     private var stopping = false
     private var awaitingCommand = false
-    private var processing = false
+    @Volatile private var processing = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val startListening = Runnable {
+        if (stopping || processing || ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return@Runnable
+        if (recognizer == null) {
+            recognizer = if (android.os.Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(this))
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(this) else SpeechRecognizer.createSpeechRecognizer(this)
+            recognizer?.setRecognitionListener(this)
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        }
+        runCatching { recognizer?.startListening(intent) }.onFailure { restartListening(1000) }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -42,26 +60,20 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
 
     private fun beginListening(delay: Long = 350) {
         if (stopping || processing || ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
-        android.os.Handler(mainLooper).postDelayed({
-            if (stopping) return@postDelayed
-            if (recognizer == null) {
-                recognizer = if (android.os.Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(this))
-                    SpeechRecognizer.createOnDeviceSpeechRecognizer(this) else SpeechRecognizer.createSpeechRecognizer(this)
-                recognizer?.setRecognitionListener(this)
-            }
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            }
-            runCatching { recognizer?.startListening(intent) }.onFailure { restartListening(1000) }
-        }, delay)
+        mainHandler.removeCallbacks(startListening)
+        mainHandler.postDelayed(startListening, delay)
     }
 
     private fun restartListening(delay: Long = 450) {
+        if (stopping || processing) return
+        mainHandler.removeCallbacks(startListening)
         recognizer?.cancel()
         beginListening(delay)
+    }
+
+    private fun pauseRecognition() {
+        mainHandler.removeCallbacks(startListening)
+        recognizer?.cancel()
     }
 
     private fun handlePhrases(phrases: List<String>) {
@@ -75,6 +87,8 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
         }
         if (command.isBlank()) {
             awaitingCommand = true
+            processing = true
+            pauseRecognition()
             updateNotification("Wake phrase heard — say your command")
             speak("Yes?", "wake")
             return
@@ -82,19 +96,19 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
         OfflineCapabilities.actionFor(command)?.let { local ->
             awaitingCommand = false
             processing = true
-            recognizer?.cancel()
+            pauseRecognition()
             updateNotification(local.confirmation, local.intent)
             speak("${local.confirmation}. Tap the notification to continue.", "offline-action")
             return
         }
         awaitingCommand = false
         processing = true
-        recognizer?.cancel()
+        pauseRecognition()
         updateNotification("Running: ${command.take(80)}")
         Thread {
             val reply = runCatching { BackgroundJarvisClient(this).ask(command) }
                 .getOrElse { "I couldn't reach the JARVIS host. ${it.message.orEmpty()}" }
-            android.os.Handler(mainLooper).post {
+            mainHandler.post {
                 updateNotification(reply.take(110))
                 speak(reply, "reply")
             }
@@ -113,14 +127,15 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
             tts?.language = Locale.getDefault()
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) = Unit
-                override fun onDone(utteranceId: String?) { processing = false; beginListening(500) }
-                @Deprecated("Deprecated in Java") override fun onError(utteranceId: String?) { processing = false; beginListening(700) }
+                override fun onDone(utteranceId: String?) { mainHandler.post { processing = false; beginListening(500) } }
+                @Deprecated("Deprecated in Java") override fun onError(utteranceId: String?) { mainHandler.post { processing = false; beginListening(700) } }
             })
         }
     }
 
     private fun stopListening(preserveManualChoice: Boolean = false) {
         stopping = true
+        mainHandler.removeCallbacks(startListening)
         if (!preserveManualChoice) getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean(PREF_ENABLED, false).apply()
         recognizer?.cancel(); recognizer?.destroy(); recognizer = null
         tts?.stop(); tts?.shutdown(); tts = null
@@ -129,6 +144,8 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     }
 
     override fun onDestroy() {
+        stopping = true
+        mainHandler.removeCallbacksAndMessages(null)
         recognizer?.destroy(); tts?.shutdown()
         super.onDestroy()
     }
