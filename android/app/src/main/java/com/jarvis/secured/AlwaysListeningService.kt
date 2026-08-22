@@ -9,10 +9,13 @@ import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.AudioRecordingConfiguration
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Process
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -28,9 +31,28 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     private var stopping = false
     private var awaitingCommand = false
     @Volatile private var processing = false
+    @Volatile private var anotherAppRecording = false
+    private lateinit var audioManager: AudioManager
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
+        override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>?) {
+            val occupied = configs.orEmpty().any { it.clientUid != Process.myUid() }
+            if (occupied == anotherAppRecording) return
+            anotherAppRecording = occupied
+            mainHandler.post {
+                if (occupied) {
+                    mainHandler.removeCallbacks(startListening)
+                    recognizer?.cancel()
+                    updateNotification("Paused while another app uses the microphone")
+                } else if (!stopping && !processing) {
+                    updateNotification("Listening for “Jarvis”")
+                    beginListening(750)
+                }
+            }
+        }
+    }
     private val startListening = Runnable {
-        if (stopping || processing || ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return@Runnable
+        if (stopping || processing || anotherAppRecording || ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return@Runnable
         if (recognizer == null) {
             recognizer = if (android.os.Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(this))
                 SpeechRecognizer.createOnDeviceSpeechRecognizer(this) else SpeechRecognizer.createSpeechRecognizer(this)
@@ -47,6 +69,8 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
 
     override fun onCreate() {
         super.onCreate()
+        audioManager = getSystemService(AudioManager::class.java)
+        audioManager.registerAudioRecordingCallback(recordingCallback, mainHandler)
         createChannel()
         startForeground(NOTIFICATION_ID, notification("Listening for “Jarvis”", true))
         tts = TextToSpeech(this, this)
@@ -59,13 +83,13 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     }
 
     private fun beginListening(delay: Long = 350) {
-        if (stopping || processing || ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        if (stopping || processing || anotherAppRecording || ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
         mainHandler.removeCallbacks(startListening)
         mainHandler.postDelayed(startListening, delay)
     }
 
     private fun restartListening(delay: Long = 450) {
-        if (stopping || processing) return
+        if (stopping || processing || anotherAppRecording) return
         mainHandler.removeCallbacks(startListening)
         recognizer?.cancel()
         beginListening(delay)
@@ -146,6 +170,7 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     override fun onDestroy() {
         stopping = true
         mainHandler.removeCallbacksAndMessages(null)
+        if (::audioManager.isInitialized) audioManager.unregisterAudioRecordingCallback(recordingCallback)
         recognizer?.destroy(); tts?.shutdown()
         super.onDestroy()
     }
