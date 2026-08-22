@@ -7,7 +7,7 @@ import java.time.Instant
 class JarvisAwarenessAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if(!AwarenessManager.enabled(this,AwarenessManager.SCREEN))return
-        val selected=if(event?.eventType==AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION) event.text?.joinToString(" ").orEmpty().take(500) else ""
+        val selected=if(event?.eventType==AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED) event.text?.joinToString(" ").orEmpty().take(500) else ""
         getSharedPreferences("jarvis",MODE_PRIVATE).edit()
             .putString("awareness_screen_package",event?.packageName?.toString().orEmpty())
             .putString("awareness_screen_updated",Instant.now().toString())
