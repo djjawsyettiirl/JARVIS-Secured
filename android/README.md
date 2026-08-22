@@ -33,6 +33,8 @@ Continuous speech recognition consumes more battery than a hardware/DSP hotword 
 
 With the `offline_search` device capability enabled, JARVIS transfers the SerpAPI key over the remote HTTPS connection and stores it encrypted by Android Keystore. If the Windows host becomes unreachable, Android keeps that encrypted copy and labels itself **Limited mode**. Direct SerpAPI Web, Images, and Videos tabs, Maps directions/searches, email composition, and Calendar event creation remain available. Home messages and host-only integrations queue or wait for reconnection.
 
+When JARVIS is selected as Android's default assistant, wake listening is automatic and managed by the system assistant role. Android intentionally offers microphone access as **Allow only while using the app**; the active assistant role and foreground listening notification provide the supported persistent path. Manual Enable/Stop controls appear only when JARVIS is not the default assistant.
+
 ### Important
 
 This build allows cleartext HTTP only to make the first LAN test easy. It is **not** an internet deployment. Do not port-forward 8765 or expose this development listener to the public internet. The next milestone is TLS/WSS, short-lived sessions, and scoped permissions.

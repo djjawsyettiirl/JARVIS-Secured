@@ -2,7 +2,7 @@
 
 A secure, multi-device personal AI assistant. The Windows host is the primary node; Android devices pair to it using one-time enrollment codes and device-bound public-key authentication.
 
-## v1.7.3 capabilities
+## v1.7.4 capabilities
 
 - Windows host with FastAPI gateway
 - One-time, expiring pairing codes
@@ -14,7 +14,7 @@ A secure, multi-device personal AI assistant. The Windows host is the primary no
 - Short-lived authenticated assistant sessions
 - Voice input and spoken replies on Windows and Android
 - Opt-in Android foreground wake listening for “Jarvis,” with persistent privacy notification and Stop action
-- Android default-assistant role support for system assistant gestures and buttons
+- Android default-assistant role support for system gestures/buttons and automatic always-listening wake activation
 - Local alarms, Google Maps actions, and Google-ready Gmail/Calendar integration
 - Automatic Cloudflare Quick Tunnel startup in the packaged Windows build
 - Live internet search through your private SearXNG server with optional SerpAPI fallback

@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -35,7 +36,7 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) stopListening()
+        if (intent?.action == ACTION_STOP) stopListening(intent.getBooleanExtra(EXTRA_PRESERVE_MANUAL, false))
         return START_STICKY
     }
 
@@ -118,9 +119,9 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
         }
     }
 
-    private fun stopListening() {
+    private fun stopListening(preserveManualChoice: Boolean = false) {
         stopping = true
-        getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean(PREF_ENABLED, false).apply()
+        if (!preserveManualChoice) getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean(PREF_ENABLED, false).apply()
         recognizer?.cancel(); recognizer?.destroy(); recognizer = null
         tts?.stop(); tts?.shutdown(); tts = null
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -160,7 +161,9 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
             .setOngoing(ongoing)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(home)
-            .addAction(0, "Stop", PendingIntent.getService(this, 1, Intent(this, AlwaysListeningService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        if (!isDefaultAssistant(this)) {
+            builder.addAction(0, "Stop", PendingIntent.getService(this, 1, Intent(this, AlwaysListeningService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        }
         if (openIntent != null) {
             val open = PendingIntent.getActivity(this, 2, openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             builder.setContentIntent(open).addAction(0, "Open", open)
@@ -175,15 +178,25 @@ class AlwaysListeningService : Service(), RecognitionListener, TextToSpeech.OnIn
         private const val CHANNEL_ID = "jarvis_always_listening"
         private const val NOTIFICATION_ID = 2202
         private const val ACTION_STOP = "com.jarvis.secured.STOP_ALWAYS_LISTENING"
+        private const val EXTRA_PRESERVE_MANUAL = "preserve_manual_choice"
 
-        fun start(context: Context) {
-            context.getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean(PREF_ENABLED, true).apply()
+        fun start(context: Context, manual: Boolean = true) {
+            if (manual) context.getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean(PREF_ENABLED, true).apply()
             ContextCompat.startForegroundService(context, Intent(context, AlwaysListeningService::class.java))
         }
 
-        fun stop(context: Context) {
-            context.getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean(PREF_ENABLED, false).apply()
-            context.startService(Intent(context, AlwaysListeningService::class.java).setAction(ACTION_STOP))
+        fun stop(context: Context, clearManualChoice: Boolean = true) {
+            if (clearManualChoice) context.getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean(PREF_ENABLED, false).apply()
+            context.startService(Intent(context, AlwaysListeningService::class.java).setAction(ACTION_STOP).putExtra(EXTRA_PRESERVE_MANUAL, !clearManualChoice))
+        }
+
+        fun isManuallyEnabled(context: Context): Boolean =
+            context.getSharedPreferences("jarvis", Context.MODE_PRIVATE).getBoolean(PREF_ENABLED, false)
+
+        fun isDefaultAssistant(context: Context): Boolean {
+            if (android.os.Build.VERSION.SDK_INT < 29) return false
+            val roles = context.getSystemService(RoleManager::class.java)
+            return roles.isRoleAvailable(RoleManager.ROLE_ASSISTANT) && roles.isRoleHeld(RoleManager.ROLE_ASSISTANT)
         }
     }
 }

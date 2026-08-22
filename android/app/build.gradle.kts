@@ -15,8 +15,8 @@ android {
         minSdk = 26
         targetSdk = 35
         val ciBuildNumber = System.getenv("JARVIS_BUILD_NUMBER")?.toIntOrNull() ?: 0
-        versionCode = 1_703_000 + ciBuildNumber
-        versionName = "1.7.3"
+        versionCode = 1_704_000 + ciBuildNumber
+        versionName = "1.7.4"
     }
 
     signingConfigs {
