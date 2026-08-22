@@ -47,6 +47,12 @@ class OnlineAssistant:
         saved_url = (keyring.get_password(KEYRING_SERVICE, SEARX_USER) or "").strip().rstrip("/")
         return environment_url or saved_url or DEFAULT_SEARXNG_URL
 
+    def searxng_configured(self) -> bool:
+        return bool(
+            os.environ.get("JARVIS_SEARXNG_URL", "").strip()
+            or (keyring.get_password(KEYRING_SERVICE, SEARX_USER) or "").strip()
+        )
+
     def configured(self) -> bool:
         return bool(
             os.environ.get("JARVIS_SEARXNG_URL", "").strip()
@@ -146,13 +152,14 @@ class OnlineAssistant:
         if search_type not in {"web", "images", "videos"}:
             raise ValueError("Search type must be web, images, or videos")
         errors = []
-        try:
-            results = self._searxng(query, search_type)
-            if results:
-                return results, "searxng"
-            errors.append("SearXNG returned no results")
-        except Exception as exc:
-            errors.append(f"SearXNG: {exc}")
+        if self.searxng_configured() or not self.serpapi_key():
+            try:
+                results = self._searxng(query, search_type)
+                if results:
+                    return results, "searxng"
+                errors.append("SearXNG returned no results")
+            except Exception as exc:
+                errors.append(f"SearXNG: {exc}")
         if self.serpapi_key():
             try:
                 results = self._serpapi(query, search_type)
