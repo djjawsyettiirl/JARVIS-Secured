@@ -49,6 +49,7 @@ class BackgroundJarvisClient(private val context: Context) {
     }
 
     fun ask(command: String): String {
+        AwarenessManager.handleLocalCommand(context, command)?.let { return it }
         val deviceId = prefs.getString("device_id", null) ?: error("Pair this phone with JARVIS first")
         var lastError: Exception? = null
         for (route in routes()) {

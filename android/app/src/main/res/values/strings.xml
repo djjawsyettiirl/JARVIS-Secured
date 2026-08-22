@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Assistant Jarvis</string>
+    <string name="awareness_accessibility_description">Optional awareness of the current app and text you select, controlled from JARVIS settings.</string>
+</resources>

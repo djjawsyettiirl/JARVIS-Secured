@@ -10,6 +10,7 @@ class JarvisApplication : Application(), Application.ActivityLifecycleCallbacks 
     override fun onCreate() {
         super.onCreate()
         RouteUpdateWorker.schedule(this)
+        AwarenessWorker.schedule(this, AwarenessManager.enabled(this, AwarenessManager.PROACTIVE))
         registerActivityLifecycleCallbacks(this)
     }
 

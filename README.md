@@ -2,7 +2,11 @@
 
 A secure, multi-device personal AI assistant. The Windows host is the primary node; Android devices pair to it using one-time enrollment codes and device-bound public-key authentication.
 
-## v1.7.5 capabilities
+## v1.8.0 capabilities
+
+- Seven separately controlled Android awareness categories: device, location, personal context, screen context, home devices, private memory, and proactive alerts.
+- Sensitive awareness data stays on the phone by default; direct context questions and proactive reminders are handled locally.
+- Optional screen context uses an explicitly enabled accessibility service that observes only the active app and selected text.
 
 - Windows host with FastAPI gateway
 - One-time, expiring pairing codes

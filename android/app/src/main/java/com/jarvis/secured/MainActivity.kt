@@ -30,6 +30,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Switch
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -81,6 +82,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var spokenName: EditText
     private lateinit var permissionStatus: TextView
     private lateinit var voiceActivationStatus: TextView
+    private lateinit var awarenessStatus: TextView
     private lateinit var enableListeningButton: Button
     private lateinit var stopListeningButton: Button
     private lateinit var defaultAssistantButton: Button
@@ -119,6 +121,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         super.onResume()
         if (::permissionStatus.isInitialized) refreshPermissions()
         if (::voiceActivationStatus.isInitialized) refreshVoiceActivationStatus()
+        if (::awarenessStatus.isInitialized) refreshAwarenessStatus()
     }
 
     private fun buildUi() {
@@ -194,6 +197,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         permissionStatus = TextView(this).apply { textSize = 14f; setTextColor(textMuted) }
         voiceActivationStatus = TextView(this).apply { textSize = 14f; setTextColor(textMuted) }
+        awarenessStatus = TextView(this).apply { textSize = 13f; setTextColor(textMuted) }
+        val awarenessControls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        AwarenessManager.categories.forEach { (key, label) ->
+            awarenessControls.addView(Switch(this).apply {
+                text = label; textSize = 14f; setTextColor(textPrimary); isChecked = AwarenessManager.enabled(this@MainActivity, key)
+                setOnCheckedChangeListener { _, checked ->
+                    AwarenessManager.setEnabled(this@MainActivity, key, checked)
+                    if (checked && key == AwarenessManager.SCREEN) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    if (checked && key == AwarenessManager.PERSONAL && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED)
+                        requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), PERMISSION_REQUEST)
+                    refreshAwarenessStatus()
+                }
+            })
+        }
         val request = styleButton(Button(this).apply {
             text = "Complete permission setup"
             setOnClickListener { requestAllPermissions() }
@@ -275,6 +292,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             card("Home inbox", "Messages and shared locations from Windows.", inboxInput, sendInbox, inboxMessages),
             card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
             card("Voice activation", "Automatic when JARVIS is your default assistant. Otherwise, you can enable wake listening manually. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListeningButton, stopListeningButton), actionRow(defaultAssistantButton, batterySettings)),
+            card("Awareness", "Each category is private, separately controlled, and handled on this phone. Sensitive context is not silently sent to the host.", awarenessStatus, awarenessControls),
             card("App permissions", "Only access required by JARVIS features is requested. The setup button advances through any missing Android grants.", permissionStatus, actionRow(request, settings), update)
         ).forEach { section ->
             root.addView(section, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -284,6 +302,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(root) }
         setContentView(scroll)
         refreshVoiceActivationStatus()
+        refreshAwarenessStatus()
     }
 
     private fun permissionRequests(): Array<String> {
@@ -329,6 +348,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             permissionLabel(Manifest.permission.CAMERA, "Camera"),
             permissionLabel(Manifest.permission.ACCESS_FINE_LOCATION, "Location sharing")
         )
+        lines.add(permissionLabel(Manifest.permission.READ_CALENDAR, "Calendar awareness (optional)"))
         if (Build.VERSION.SDK_INT >= 33) lines.add(permissionLabel(Manifest.permission.POST_NOTIFICATIONS, "Notifications"))
         if (Build.VERSION.SDK_INT >= 31) {
             lines.add(permissionLabel(Manifest.permission.BLUETOOTH_SCAN, "Nearby devices / scan"))
@@ -341,6 +361,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         lines.add("Default assistant: ${if (AlwaysListeningService.isDefaultAssistant(this)) "JARVIS" else "OPTIONAL / NOT SELECTED"}")
         val runtimeReady = permissionRequests().all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
         permissionStatus.text = "Permission readiness: ${if (runtimeReady && installs && battery) "COMPLETE" else "ACTION NEEDED"}\n" + lines.joinToString("\n")
+    }
+
+    private fun refreshAwarenessStatus() {
+        if (!::awarenessStatus.isInitialized) return
+        val enabled = AwarenessManager.categories.filter { AwarenessManager.enabled(this, it.first) }.map { it.second }
+        awarenessStatus.text = "Enabled: ${if (enabled.isEmpty()) "none" else enabled.joinToString(", ")}\nSay “what do you know about my context?” for a private summary."
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -631,6 +657,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun askJarvis() {
         val message = assistantInput.text.toString().trim()
         if (message.isEmpty()) return
+        AwarenessManager.handleLocalCommand(this, message)?.let { assistantReply.text = it; return }
         val token = sessionToken
         if (token == null) {
             OfflineCapabilities.launch(this, message)?.let { assistantReply.text = "Limited mode · $it"; return }

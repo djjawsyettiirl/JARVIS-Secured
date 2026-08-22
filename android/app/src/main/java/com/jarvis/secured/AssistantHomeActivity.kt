@@ -222,6 +222,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun sendCurrent() {
         val text=composer.text.toString().trim();if(text.isEmpty())return;composer.text.clear()
         addMessage(if(targetHome)"You → Home" else "You",text,mine=true)
+        if(!targetHome) AwarenessManager.handleLocalCommand(this,text)?.let { addMessage("Jarvis · awareness",it);return }
         val target=if(targetHome)"home" else "jarvis"
         if(!targetHome)lastSearchQuery=text
         val token=sessionToken;val route=activeRoute
