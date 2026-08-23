@@ -1,0 +1,216 @@
+from __future__ import annotations
+
+import os
+from urllib.parse import quote_plus
+
+import httpx
+import keyring
+
+KEYRING_SERVICE = "JARVIS-Secured"
+SEARX_USER = "searxng-url"
+SERPAPI_USER = "serpapi-key"
+DEFAULT_SEARXNG_URL = "http://127.0.0.1:8080"
+
+
+class OnlineAssistant:
+    def save_searxng_url(self, value: str) -> None:
+        clean = value.strip().rstrip("/")
+        if not clean.startswith(("http://", "https://")):
+            raise ValueError("SearXNG URL must start with http:// or https://")
+        keyring.set_password(KEYRING_SERVICE, SEARX_USER, clean)
+
+    def remove_searxng_url(self) -> None:
+        try:
+            keyring.delete_password(KEYRING_SERVICE, SEARX_USER)
+        except keyring.errors.PasswordDeleteError:
+            pass
+
+    def save_serpapi_key(self, value: str) -> None:
+        clean = value.strip()
+        if len(clean) < 20:
+            raise ValueError("Enter a valid SerpAPI key")
+        keyring.set_password(KEYRING_SERVICE, SERPAPI_USER, clean)
+
+    def remove_serpapi_key(self) -> None:
+        try:
+            keyring.delete_password(KEYRING_SERVICE, SERPAPI_USER)
+        except keyring.errors.PasswordDeleteError:
+            pass
+
+    def serpapi_key(self) -> str:
+        return os.environ.get("JARVIS_SERPAPI_KEY", "").strip() or (
+            keyring.get_password(KEYRING_SERVICE, SERPAPI_USER) or ""
+        ).strip()
+
+    def searxng_url(self) -> str:
+        environment_url = os.environ.get("JARVIS_SEARXNG_URL", "").strip().rstrip("/")
+        saved_url = (keyring.get_password(KEYRING_SERVICE, SEARX_USER) or "").strip().rstrip("/")
+        return environment_url or saved_url or DEFAULT_SEARXNG_URL
+
+    def searxng_configured(self) -> bool:
+        return bool(
+            os.environ.get("JARVIS_SEARXNG_URL", "").strip()
+            or (keyring.get_password(KEYRING_SERVICE, SEARX_USER) or "").strip()
+        )
+
+    def configured(self) -> bool:
+        return bool(
+            os.environ.get("JARVIS_SEARXNG_URL", "").strip()
+            or (keyring.get_password(KEYRING_SERVICE, SEARX_USER) or "").strip()
+            or self.serpapi_key()
+        )
+
+    def _searxng(self, query: str, search_type: str = "web") -> list[dict[str, str]]:
+        with httpx.Client(timeout=8.0, follow_redirects=True) as client:
+            response = client.get(
+                f"{self.searxng_url()}/search",
+                params={
+                    "q": query,
+                    "format": "json",
+                    "language": "en",
+                    "categories": {"web": "general", "images": "images", "videos": "videos"}[search_type],
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+        results = []
+        for item in data.get("results", [])[:6]:
+            link = str(item.get("url") or "")
+            if not link:
+                continue
+            results.append({
+                "title": str(item.get("title") or link),
+                "url": link,
+                "snippet": str(item.get("content") or "").strip(),
+                "provider": "SearXNG",
+                "type": search_type,
+                "thumbnail": str(item.get("thumbnail_src") or item.get("img_src") or item.get("thumbnail") or ""),
+            })
+        return results
+
+    def _serpapi(self, query: str, search_type: str = "web") -> list[dict[str, str]]:
+        key = self.serpapi_key()
+        if not key:
+            raise RuntimeError("SerpAPI is not configured")
+        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+            response = client.get(
+                "https://serpapi.com/search.json",
+                params={
+                    "engine": {"web": "google", "images": "google_images", "videos": "google_videos"}[search_type],
+                    "q": query,
+                    "api_key": key,
+                    "hl": "en",
+                    "gl": "us",
+                    "safe": "active",
+                },
+            )
+            try:
+                data = response.json()
+            except ValueError as exc:
+                raise RuntimeError(f"SerpAPI returned HTTP {response.status_code}") from exc
+            if response.is_error:
+                raise RuntimeError(str(data.get("error") or f"SerpAPI returned HTTP {response.status_code}"))
+        if data.get("error"):
+            raise RuntimeError(str(data["error"]))
+        results = []
+        result_key = {"web": "organic_results", "images": "images_results", "videos": "video_results"}[search_type]
+        for item in data.get(result_key, [])[:6]:
+            link = str(item.get("link") or item.get("original") or "")
+            if not link:
+                continue
+            results.append({
+                "title": str(item.get("title") or link),
+                "url": link,
+                "snippet": str(item.get("snippet") or item.get("source") or item.get("channel") or "").strip(),
+                "provider": "SerpAPI",
+                "type": search_type,
+                "thumbnail": str(item.get("thumbnail") or item.get("image") or ""),
+            })
+        return results
+
+    def connection_status(self) -> dict[str, object]:
+        url = self.searxng_url()
+        try:
+            results = self._searxng("SearXNG connection test")
+            return {
+                "configured": self.configured(),
+                "connected": True,
+                "url": url,
+                "results": len(results),
+                "serpapi_configured": bool(self.serpapi_key()),
+            }
+        except Exception as exc:
+            return {
+                "configured": self.configured(),
+                "connected": False,
+                "url": url,
+                "error": str(exc),
+                "serpapi_configured": bool(self.serpapi_key()),
+            }
+
+    def search(self, query: str, search_type: str = "web") -> tuple[list[dict[str, str]], str]:
+        if search_type not in {"web", "images", "videos"}:
+            raise ValueError("Search type must be web, images, or videos")
+        errors = []
+        if self.searxng_configured() or not self.serpapi_key():
+            try:
+                results = self._searxng(query, search_type)
+                if results:
+                    return results, "searxng"
+                errors.append("SearXNG returned no results")
+            except Exception as exc:
+                errors.append(f"SearXNG: {exc}")
+        if self.serpapi_key():
+            try:
+                results = self._serpapi(query, search_type)
+                if results:
+                    return results, "serpapi"
+                errors.append("SerpAPI returned no results")
+            except Exception as exc:
+                errors.append(f"SerpAPI: {exc}")
+        raise RuntimeError("; ".join(errors))
+
+    def ask(self, message: str, search_type: str = "web") -> dict[str, object]:
+        try:
+            results, provider = self.search(message, search_type)
+        except Exception as exc:
+            if search_type in {"images", "videos"}:
+                label = "Images" if search_type == "images" else "Videos"
+                url = "https://www.google.com/search?" + (
+                    f"tbm={'isch' if search_type == 'images' else 'vid'}&q={quote_plus(message)}"
+                )
+                source = {
+                    "title": f"Open all {label.lower()} for {message}",
+                    "url": url,
+                    "snippet": f"Continue in Google {label}",
+                    "provider": "Google",
+                    "type": search_type,
+                    "thumbnail": "",
+                }
+                return {
+                    "reply": f"No embedded {label.lower()} matched that request. Open the full {label} search below.",
+                    "sources": [source],
+                    "search_provider": "Google",
+                    "search_type": search_type,
+                    "action": None,
+                }
+            return {
+                "reply": f"Internet search is unavailable right now: {exc}",
+                "action": None,
+                "needs_search_setup": True,
+            }
+
+        provider_name = "SearXNG" if provider == "searxng" else "SerpAPI"
+        label = {"web": "Web", "images": "Image", "videos": "Video"}[search_type]
+        lines = [f"{label} results via {provider_name}:"]
+        for index, item in enumerate(results[:3], 1):
+            snippet = item["snippet"][:120].strip()
+            lines.append(
+                f"{index}. {item['title']}"
+                + (f" — {snippet}" if snippet else "")
+                + f"\n{item['url']}"
+            )
+        return {"reply": "\n\n".join(lines), "sources": results[:3], "search_provider": provider_name, "search_type": search_type, "action": None}
+
+
+online_assistant = OnlineAssistant()

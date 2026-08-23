@@ -3,8 +3,49 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-android { namespace = "com.jarvis.secured"; compileSdk = 35
-    defaultConfig { applicationId = "com.jarvis.secured"; minSdk = 26; targetSdk = 35; versionCode = 1; versionName = "0.1.0" }
+android {
+    namespace = "com.jarvis.secured"
+    compileSdk = 35
+    buildFeatures {
+        buildConfig = true
+    }
+
+    defaultConfig {
+        applicationId = "com.jarvis.secured"
+        minSdk = 26
+        targetSdk = 35
+        val ciBuildNumber = System.getenv("JARVIS_BUILD_NUMBER")?.toIntOrNull() ?: 0
+        versionCode = 1_804_000 + ciBuildNumber
+        versionName = "1.8.4"
+    }
+
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("JARVIS_KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("JARVIS_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("JARVIS_KEY_ALIAS")
+                keyPassword = System.getenv("JARVIS_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 }
 
 dependencies {
@@ -13,4 +54,5 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
+    implementation("androidx.work:work-runtime-ktx:2.10.2")
 }

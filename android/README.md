@@ -21,6 +21,22 @@ Open the `android/` folder in Android Studio. Let Gradle sync, then connect the 
 
 The Android app creates an ECDSA P-256 key in Android Keystore. The private key stays on the phone. The one-time code is consumed after successful enrollment, and the phone then proves possession of its private key by signing the host challenge.
 
+## Voice activation
+
+Open **Settings → Voice activation** inside JARVIS after pairing. **Enable always listening** requests microphone and notification access, then starts a user-visible microphone foreground service. Say “Jarvis” followed by a command. The persistent notification always identifies active listening and includes a Stop action.
+
+Use **Set as default assistant** to open Android's assistant-role consent screen. Once selected, the phone's configured assistant gesture or button opens JARVIS voice input. **Allow background battery use** opens Android's battery-exemption confirmation; this is optional but helps manufacturers that aggressively stop background services.
+
+Continuous speech recognition consumes more battery than a hardware/DSP hotword detector and may use the phone's configured online speech-recognition provider when on-device recognition is unavailable.
+
+## Limited mode without Windows
+
+With the `offline_search` device capability enabled, JARVIS transfers the SerpAPI key over the remote HTTPS connection and stores it encrypted by Android Keystore. If the Windows host becomes unreachable, Android keeps that encrypted copy and labels itself **Limited mode**. Direct SerpAPI Web, Images, and Videos tabs, Maps directions/searches, email composition, and Calendar event creation remain available. Home messages and host-only integrations queue or wait for reconnection.
+
+When JARVIS is selected as Android's default assistant, wake listening is automatic and managed by the system assistant role. Android intentionally offers microphone access as **Allow only while using the app**; the active assistant role and foreground listening notification provide the supported persistent path. Manual Enable/Stop controls appear only when JARVIS is not the default assistant.
+
+The Android permission-readiness panel checks microphone, notifications, camera, precise location, nearby-device scanning/connection, private APK installation, and unrestricted background battery use. It intentionally does not request unrelated contacts, call-log, SMS, or storage access. Maps, email composition, and Calendar event creation use Android's secure app intents rather than reading those apps' private data.
+
 ### Important
 
 This build allows cleartext HTTP only to make the first LAN test easy. It is **not** an internet deployment. Do not port-forward 8765 or expose this development listener to the public internet. The next milestone is TLS/WSS, short-lived sessions, and scoped permissions.

@@ -2,21 +2,29 @@ from __future__ import annotations
 
 import base64
 import secrets
+import socket
 import time
-from typing import Annotated
+from collections import defaultdict, deque
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from fastapi import FastAPI, Header, HTTPException
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .store import Store
+from .assistant import respond
+from .online_assistant import online_assistant
+from .updater import updater
+from . import tunnel
+from .version import VERSION
 
-app = FastAPI(title="JARVIS Secure Host", version="0.1.0")
+app = FastAPI(title="Assistant Jarvis Secure Host", version=VERSION)
 store = Store()
-
-# Short-lived challenges are kept in memory and are single-use.
 challenges: dict[str, tuple[str, float]] = {}
+sessions: dict[str, tuple[str, float]] = {}
+_pair_attempts: dict[str, deque[float]] = defaultdict(deque)
 
 
 class PairRequest(BaseModel):
@@ -28,6 +36,8 @@ class PairRequest(BaseModel):
 class PairResponse(BaseModel):
     device_id: str
     challenge: str
+    scopes: list[str]
+    routes: dict[str, str]
 
 
 class ChallengeResponse(BaseModel):
@@ -40,6 +50,19 @@ class AuthenticateRequest(BaseModel):
     signature_b64: str
 
 
+class AssistantRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+    search_type: str = Field(default="web", pattern=r"^(web|images|videos)$")
+
+
+class MessageRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class DeviceNameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+
+
 def _load_public_key(pem: str):
     key = serialization.load_pem_public_key(pem.encode("utf-8"))
     if not isinstance(key, ec.EllipticCurvePublicKey) or not isinstance(key.curve, ec.SECP256R1):
@@ -48,31 +71,110 @@ def _load_public_key(pem: str):
 
 
 def _new_challenge(device_id: str) -> str:
-    challenge = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii")
+    challenge = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii").rstrip("=")
     challenges[device_id] = (challenge, time.time() + 60)
     return challenge
 
 
+def _new_session(device_id: str) -> tuple[str, int]:
+    ttl = 60 * 60
+    token = secrets.token_urlsafe(32)
+    sessions[token] = (device_id, time.time() + ttl)
+    return token, ttl
+
+
+def _authenticated_device(authorization: str | None, route: str = "") -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    token = authorization.removeprefix("Bearer ").strip()
+    record = sessions.get(token)
+    if not record or record[1] < time.time():
+        sessions.pop(token, None)
+        raise HTTPException(status_code=401, detail="Session expired")
+    device_id = record[0]
+    row = store.get_device(device_id)
+    if not row or row["revoked"]:
+        sessions.pop(token, None)
+        raise HTTPException(status_code=401, detail="Unknown or revoked device")
+    store.touch_device(device_id, route)
+    return device_id
+
+
+def _decode_signature_base64(value: str) -> bytes:
+    normalized = value.strip()
+    normalized += "=" * (-len(normalized) % 4)
+    try:
+        return base64.b64decode(normalized.encode("ascii"), altchars=b"-_", validate=True)
+    except Exception:
+        return base64.b64decode(normalized.encode("ascii"), validate=True)
+
+
+def _normalize_ecdsa_signature(signature: bytes) -> bytes:
+    if len(signature) == 64:
+        r = int.from_bytes(signature[:32], "big")
+        s = int.from_bytes(signature[32:], "big")
+        return encode_dss_signature(r, s)
+    return signature
+
+
+def _client_ip(request: Request) -> str:
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _route_kind(request: Request) -> str:
+    if request.headers.get("cf-connecting-ip"):
+        return "remote"
+    host = request.headers.get("host", "")
+    if host.startswith("127.0.0.1") or host.startswith("localhost"):
+        return "local-host"
+    return "lan"
+
+
+def _check_pair_rate_limit(request: Request) -> None:
+    ip = _client_ip(request)
+    now = time.time()
+    window = _pair_attempts[ip]
+    while window and window[0] < now - 60:
+        window.popleft()
+    if len(window) >= 10:
+        raise HTTPException(status_code=429, detail="Too many pairing attempts. Wait one minute and try again.")
+    window.append(now)
+
+
+def _connection_routes() -> dict[str, str]:
+    lan = ""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("10.255.255.255", 1))
+        lan = f"http://{sock.getsockname()[0]}:8765"
+    except OSError:
+        pass
+    finally:
+        sock.close()
+    return {"lan": lan, "remote": tunnel.public_url}
+
+
 @app.get("/health")
 def health():
-    return {"status": "online", "service": "jarvis-host", "version": app.version}
+    return {"status": "online", "service": "assistant-jarvis-host", "version": app.version}
 
 
 @app.post("/pair", response_model=PairResponse)
-def pair(request: PairRequest):
-    # Validate the public key before consuming the one-time enrollment code.
-    # This prevents a malformed request from burning the user's pairing code.
+def pair(request: PairRequest, http_request: Request):
+    _check_pair_rate_limit(http_request)
     try:
         _load_public_key(request.public_key_pem)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid P-256 public key") from exc
-
     if not store.consume_pairing(request.code):
         raise HTTPException(status_code=401, detail="Pairing code is invalid, expired, or already used")
-
     device_id = store.add_device(request.device_name.strip(), request.public_key_pem)
+    store.touch_device(device_id, _route_kind(http_request))
     challenge = _new_challenge(device_id)
-    return PairResponse(device_id=device_id, challenge=challenge)
+    return PairResponse(device_id=device_id, challenge=challenge, scopes=store.get_scopes(device_id), routes=_connection_routes())
 
 
 @app.post("/auth/challenge", response_model=ChallengeResponse)
@@ -84,7 +186,7 @@ def challenge(device_id: str):
 
 
 @app.post("/auth/verify")
-def verify(request: AuthenticateRequest):
+def verify(request: AuthenticateRequest, http_request: Request):
     row = store.get_device(request.device_id)
     if not row or row["revoked"]:
         raise HTTPException(status_code=401, detail="Unknown or revoked device")
@@ -94,28 +196,91 @@ def verify(request: AuthenticateRequest):
     challenge_value, _ = record
     try:
         key = _load_public_key(row["public_key_pem"])
-        signature = base64.urlsafe_b64decode(request.signature_b64.encode("ascii"))
+        signature = _normalize_ecdsa_signature(_decode_signature_base64(request.signature_b64))
         key.verify(signature, challenge_value.encode("utf-8"), ec.ECDSA(hashes.SHA256()))
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid device signature") from exc
-
-    # v0.1 proves device possession but intentionally does not mint a
-    # long-lived token or expose Windows control tools yet.
-    return {"authenticated": True, "device_id": request.device_id}
-
-
-@app.get("/devices")
-def devices(authorization: Annotated[str | None, Header()] = None):
-    # Local/admin UI only in v0.1. Do not expose this route through a public gateway.
-    if authorization != "Bearer LOCAL_ADMIN":
-        raise HTTPException(status_code=403, detail="Admin authentication required")
-    return [dict(row) for row in store.list_devices()]
+    token, expires_in = _new_session(request.device_id)
+    route = _route_kind(http_request)
+    store.touch_device(request.device_id, route)
+    return {"authenticated": True, "device_id": request.device_id, "scopes": store.get_scopes(request.device_id), "session_token": token, "expires_in": expires_in, "active_route": route, "routes": _connection_routes()}
 
 
-@app.post("/devices/{device_id}/revoke")
-def revoke(device_id: str, authorization: Annotated[str | None, Header()] = None):
-    if authorization != "Bearer LOCAL_ADMIN":
-        raise HTTPException(status_code=403, detail="Admin authentication required")
-    if not store.revoke_device(device_id):
-        raise HTTPException(status_code=404, detail="Device not found")
-    return {"revoked": True, "device_id": device_id}
+@app.get("/connection/routes")
+def connection_routes(http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    return {**_connection_routes(), "active_route": _route_kind(http_request), "device_id": device_id}
+
+
+@app.get("/search/mobile-credentials")
+def mobile_search_credentials(
+    http_request: Request,
+    response: Response,
+    authorization: str | None = Header(default=None),
+):
+    route = _route_kind(http_request)
+    device_id = _authenticated_device(authorization, route)
+    if "offline_search" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the offline_search capability")
+    if route != "remote":
+        raise HTTPException(status_code=403, detail="Search credentials are synchronized only through the encrypted remote route")
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "provider": "serpapi",
+        "serpapi_key": online_assistant.serpapi_key() or None,
+    }
+
+
+@app.post("/assistant")
+def assistant(request: AssistantRequest, http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    if "chat" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the chat capability")
+    try:
+        return respond(request.message, set(store.get_scopes(device_id)), request.search_type)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/messages")
+def send_message(request: MessageRequest, http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    if "messaging" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the messaging capability")
+    return {"message_id": store.send_message(device_id, request.body.strip()), "sent": True}
+
+
+@app.get("/messages")
+def messages(http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    if "messaging" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the messaging capability")
+    return store.device_messages(device_id)
+
+
+@app.post("/device/name")
+def rename_current_device(request: DeviceNameRequest, http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    store.rename_device(device_id, request.name.strip())
+    return {"renamed": True, "name": request.name.strip()}
+
+
+@app.get("/updates/android/status")
+def android_update_status(http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    if "software_updates" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the software_updates capability")
+    return {
+        "available": updater.status == "ready" and updater.android_apk.is_file(),
+        "build": updater.android_build(),
+    }
+
+
+@app.get("/updates/android")
+def android_update(http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    if "software_updates" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the software_updates capability")
+    if updater.status != "ready" or not updater.android_apk.is_file():
+        raise HTTPException(status_code=404, detail="No Android update is ready")
+    return FileResponse(updater.android_apk, media_type="application/vnd.android.package-archive", filename="Assistant-Jarvis-update.apk")

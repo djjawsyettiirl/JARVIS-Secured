@@ -1,0 +1,74 @@
+name: Windows host build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, v0.1-secure-pairing]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install host dependencies
+        run: python -m pip install --upgrade pip && pip install -r host/requirements.txt pyinstaller
+      - name: Run host tests
+        working-directory: host
+        run: python -m pytest tests -q
+      - name: Download Cloudflare tunnel client
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            -Uri 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe' `
+            -OutFile 'host/cloudflared.exe'
+      - name: Stamp private build identity
+        shell: pwsh
+        run: |
+          @{ version = '1.8.4'; commit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content host/build-info.json
+      - name: Bundle Windows speech engine
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri 'https://api.nuget.org/v3-flatcontainer/system.speech/10.0.10/system.speech.10.0.10.nupkg' -OutFile 'system.speech.zip'
+          Expand-Archive -LiteralPath 'system.speech.zip' -DestinationPath 'system-speech-package'
+          Copy-Item 'system-speech-package/lib/netstandard2.0/System.Speech.dll' 'host/System.Speech.dll'
+      - name: Build Windows host executable
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS --icon host/assets/jarvis.ico --paths host --collect-all uvicorn --collect-all fastapi --collect-all cryptography --hidden-import cryptography.hazmat.bindings._rust --collect-all googleapiclient --collect-all google_auth_oauthlib --collect-all keyring --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr --add-binary "host/cloudflared.exe;." --add-binary "host/System.Speech.dll;." --add-data "host/build-info.json;." host/run_host.py
+      - name: Build companion updater
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS-Updater --icon host/assets/jarvis.ico host/run_updater.py
+      - name: Smoke test packaged executable
+        shell: pwsh
+        run: |
+          $env:JARVIS_SMOKE_TEST = '1'
+          $process = Start-Process -FilePath 'dist/JARVIS.exe' -PassThru -Wait -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw "Packaged JARVIS smoke test failed with exit code $($process.ExitCode)" }
+          $updater = Start-Process -FilePath 'dist/JARVIS-Updater.exe' -ArgumentList '--help' -PassThru -Wait -WindowStyle Hidden
+          if ($updater.ExitCode -ne 0) { throw "Packaged updater smoke test failed with exit code $($updater.ExitCode)" }
+      - name: Prepare package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item dist/JARVIS.exe package/JARVIS.exe
+          Copy-Item dist/JARVIS-Updater.exe package/JARVIS-Updater.exe
+          @'
+          JARVIS for Windows v1.8.4
+
+          Run JARVIS.exe. It opens as a standalone Windows desktop application.
+          The secure host, dashboard, and Cloudflare tunnel run inside the app.
+          No console or external browser window is required.
+
+          The bundled Cloudflare Quick Tunnel starts automatically. Its temporary
+          HTTPS address appears in the dashboard. Paired Android devices receive
+          signed background route handoffs so a changed Quick Tunnel URL can be
+          recovered without a paid domain. Do not expose the local admin dashboard
+          (8766) publicly.
+          '@ | Set-Content package/README.txt
+          Compress-Archive -Path package/* -DestinationPath JARVIS-Windows-Host.zip -Force
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-windows-host
+          path: JARVIS-Windows-Host.zip
+          if-no-files-found: error
