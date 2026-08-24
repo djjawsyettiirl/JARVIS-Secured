@@ -1,0 +1,9 @@
+Vosk model notice
+
+The bundled vosk-model-small-en-us-0.15 model is distributed by Alpha Cephei
+under the Apache License 2.0.
+
+Model source: https://alphacephei.com/vosk/models
+Vosk source and license: https://github.com/alphacep/vosk-api
+
+Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0

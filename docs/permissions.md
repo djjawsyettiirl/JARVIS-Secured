@@ -4,7 +4,7 @@ JARVIS has two different permission layers. They should not be treated as the sa
 
 ## Android OS permissions
 
-Android controls access to microphone, camera, notifications, and nearby Bluetooth devices. JARVIS should request these at first launch in a clear onboarding screen, with a description of why each capability is needed. The user can deny any capability and grant it later in Android Settings.
+Android controls access to microphone, notifications, location, and calendar data. JARVIS requests microphone and notifications during voice setup; optional location and calendar access are requested only when the matching awareness category is enabled. Camera, nearby-device, contacts, call-log, SMS, and storage access are not requested by the current visible feature set. The user can deny any capability and grant it later in Android Settings.
 
 JARVIS must never attempt to bypass Android's runtime permission system.
 
