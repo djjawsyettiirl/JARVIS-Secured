@@ -2,7 +2,7 @@
 
 JARVIS is a private, multi-device assistant with a Windows home host and a paired Android companion. Windows manages device trust, internet search, messaging, and private updates. Android retains limited local abilities when the host is unavailable.
 
-> Current private release: **1.8.4**
+> Current private release: **1.9.0**
 >
 > Active development branch: **`v0.1-secure-pairing`**
 
@@ -20,10 +20,10 @@ JARVIS is a private, multi-device assistant with a Windows home host and a paire
 ### Android
 
 - One-time secure pairing with automatic reconnection.
-- Optional “Jarvis” wake-phrase listening through a visible foreground service.
+- Persistent offline “Jarvis” wake-phrase detection through a visible foreground service.
 - Android default-assistant role support for configured gestures and buttons.
 - Microphone-session ownership tracking: JARVIS yields while another app records and resumes after release.
-- Controlled speech-recognizer retries without recursive cancel/restart loops.
+- Android speech recognition runs only for the short command after the local wake word, eliminating continuous recognizer restart loops.
 - Limited mode with direct SerpAPI search, Maps, email composition, and Calendar actions when Windows is unreachable.
 - Seven separately controlled awareness categories: device, location, personal context, screen context, home devices, private memory, and proactive alerts.
 - Encrypted storage of the transferred SerpAPI key using Android Keystore.
@@ -102,7 +102,7 @@ The packaged host can create a Cloudflare Quick Tunnel for remote access. Every 
 
 ## Current limitations
 
-- Wake-phrase recognition depends on Android’s installed speech-recognition service and manufacturer background-process rules.
+- Wake-phrase recognition runs locally with the bundled offline model; command transcription still depends on Android’s installed speech-recognition service.
 - Android always-listening mode must remain visible through its foreground-service notification.
 - Gmail and Calendar support opens secure Android intents; JARVIS does not read private email or calendar databases.
 - Host-dependent messaging and integrations wait or queue while Windows is unreachable.

@@ -385,7 +385,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             requestPermissions(needed.toTypedArray(), PERMISSION_REQUEST)
             return
         }
-        runCatching { AlwaysListeningService.start(this, manual) }
+        AlwaysListeningService.start(this, manual)
             .onSuccess { voiceActivationStatus.text = "Always listening: ON${if (!manual) " · managed by default assistant" else ""}\nSay “Jarvis” followed by your command." }
             .onFailure { voiceActivationStatus.text = "Could not start listening: ${it.message}" }
     }
@@ -429,13 +429,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             defaultAssistantButton.isEnabled = !assistant
         }
         if (assistant && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            runCatching { AlwaysListeningService.start(this, manual = false) }
+            AlwaysListeningService.start(this, manual = false)
         }
+        val lastError = AlwaysListeningService.lastError(this)
         voiceActivationStatus.text = if (assistant) {
             "Always listening: ON · managed by Android assistant role\nMicrophone: ${if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) "READY" else "GRANT WHILE USING APP"}\nBackground battery use: ${if (battery) "allowed" else "system managed"}"
         } else {
             "Always listening: ${if (manualEnabled) "ON" else "OFF"} · manual\nDefault assistant: not selected\nBackground battery use: ${if (battery) "allowed" else "system managed"}"
         }
+        if (lastError.isNotBlank()) voiceActivationStatus.append("\nLast listener error: ${lastError.take(160)}")
     }
 
     private fun ensureKeyPair() {
@@ -584,7 +586,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 status.text = if (ok) "✓ JARVIS paired and authenticated\nDevice: $deviceId" else "Authentication failed: $body"
                 scopesStatus.text = "JARVIS capabilities\n" + (if (scopes.isEmpty()) "None" else scopes.joinToString("\n") { "• $it" })
                 if (ok) assistantReply.text = "Ready. Ask me about Gmail, Calendar, Maps, or alarms."
-                if (ok) startMessagePolling()
+                // The visible AssistantHomeActivity owns message polling. Keep the
+                // legacy settings-screen inbox code dormant to avoid duplicate TTS.
                 if (ok) startAutomaticUpdatePolling()
             }
           }

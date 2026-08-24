@@ -15,8 +15,8 @@ android {
         minSdk = 26
         targetSdk = 35
         val ciBuildNumber = System.getenv("JARVIS_BUILD_NUMBER")?.toIntOrNull() ?: 0
-        versionCode = 1_804_000 + ciBuildNumber
-        versionName = "1.8.4"
+        versionCode = 1_900_000 + ciBuildNumber
+        versionName = "1.9.0"
     }
 
     signingConfigs {
@@ -54,5 +54,7 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
-    implementation("androidx.work:work-runtime-ktx:2.10.2")
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
+    implementation("com.alphacephei:vosk-android:0.3.75@aar")
 }

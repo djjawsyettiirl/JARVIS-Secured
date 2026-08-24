@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest-*/
+.test-venv/
+.venv/
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
+
+# Windows packaging
+dist/
+package/
+*.spec
+host/build-info.json
+host/cloudflared.exe
+host/System.Speech.dll
+JARVIS-Windows-Host.zip
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

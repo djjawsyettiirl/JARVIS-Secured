@@ -14,7 +14,7 @@ Open the `android/` folder in Android Studio. Let Gradle sync, then connect the 
 
    `py host/run_host.py`
 
-3. The Windows console prints a one-time 8-digit pairing code valid for five minutes.
+3. Open Windows JARVIS Settings and generate a one-time 8-digit pairing code valid for five minutes.
 4. Find the Windows PC's LAN IPv4 address with `ipconfig`.
 5. In the Android app enter `http://PC_IP:8765` and the displayed code.
 6. Press **PAIR WITH JARVIS**.
@@ -23,11 +23,11 @@ The Android app creates an ECDSA P-256 key in Android Keystore. The private key 
 
 ## Voice activation
 
-Open **Settings → Voice activation** inside JARVIS after pairing. **Enable always listening** requests microphone and notification access, then starts a user-visible microphone foreground service. Say “Jarvis” followed by a command. The persistent notification always identifies active listening and includes a Stop action.
+Open **Settings → Voice activation** inside JARVIS after pairing. **Enable always listening** requests microphone and notification access, then starts a user-visible microphone foreground service. Wake-word detection uses the bundled Vosk English model entirely on the phone. Android's speech recognizer starts only after “Jarvis” is detected and stops after the command. The persistent notification identifies active listening and includes a Stop action.
 
 Use **Set as default assistant** to open Android's assistant-role consent screen. Once selected, the phone's configured assistant gesture or button opens JARVIS voice input. **Allow background battery use** opens Android's battery-exemption confirmation; this is optional but helps manufacturers that aggressively stop background services.
 
-Continuous speech recognition consumes more battery than a hardware/DSP hotword detector and may use the phone's configured online speech-recognition provider when on-device recognition is unavailable.
+Offline wake detection uses additional battery compared with an OEM hardware/DSP hotword detector. The short command-recognition step prefers Android's on-device recognizer and can fall back to the phone's configured recognition service.
 
 ## Limited mode without Windows
 
@@ -35,8 +35,8 @@ With the `offline_search` device capability enabled, JARVIS transfers the SerpAP
 
 When JARVIS is selected as Android's default assistant, wake listening is automatic and managed by the system assistant role. Android intentionally offers microphone access as **Allow only while using the app**; the active assistant role and foreground listening notification provide the supported persistent path. Manual Enable/Stop controls appear only when JARVIS is not the default assistant.
 
-The Android permission-readiness panel checks microphone, notifications, camera, precise location, nearby-device scanning/connection, private APK installation, and unrestricted background battery use. It intentionally does not request unrelated contacts, call-log, SMS, or storage access. Maps, email composition, and Calendar event creation use Android's secure app intents rather than reading those apps' private data.
+The Android permission-readiness panel checks microphone, notifications, optional precise location and calendar awareness, private APK installation, and background battery status. It intentionally does not request camera, nearby-device, contacts, call-log, SMS, or storage access. Maps, email composition, and Calendar event creation use Android's secure app intents rather than reading those apps' private data.
 
 ### Important
 
-This build allows cleartext HTTP only to make the first LAN test easy. It is **not** an internet deployment. Do not port-forward 8765 or expose this development listener to the public internet. The next milestone is TLS/WSS, short-lived sessions, and scoped permissions.
+Cleartext HTTP exists only for same-network pairing. Never port-forward port 8765. Remote connections use the generated HTTPS tunnel plus device-bound authentication and short-lived scoped sessions.

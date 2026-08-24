@@ -137,7 +137,7 @@ details.advanced{{grid-column:1/-1;background:#0b121d;border:1px solid var(--lin
 <header class='app-header'><div class='brand'><div class='orb'></div><div><h1>JARVIS</h1><div class='small'>Windows voice assistant · v{VERSION}</div></div></div><span class='{online_class} badge'>Remote {escape(tunnel.status)}</span></header>
 <main class='dashboard'>
 
-<section class='card hero'><h2>Assistant</h2>
+<section class='card hero unused-feature'><h2>Assistant</h2>
 <p class='small'>Speak or type a request. Voice recognition and spoken replies use the native Windows speech engine.</p>
 <input id='assistantInput' class='assistant' placeholder="Ask about Gmail, Calendar, or Maps" autocomplete='off'>
 <button id='askButton' type='button' onclick='askJarvis()'>Ask JARVIS</button>

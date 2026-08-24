@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.media.AudioManager
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.provider.CalendarContract
 import androidx.core.app.NotificationCompat
@@ -62,12 +63,21 @@ object AwarenessManager {
     private fun device(context: Context): JSONObject {
         val battery = context.getSystemService(BatteryManager::class.java)
         val audio = context.getSystemService(AudioManager::class.java)
-        val network = context.getSystemService(ConnectivityManager::class.java).activeNetworkInfo
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+        val network = when {
+            capabilities == null -> "offline"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WIFI"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "MOBILE"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ETHERNET"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
+            else -> "OTHER"
+        }
         return JSONObject()
             .put("battery_percent", battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
             .put("charging", battery.isCharging)
-            .put("network", network?.typeName ?: "offline")
-            .put("connected", network?.isConnected == true)
+            .put("network", network)
+            .put("connected", capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true)
             .put("ringer_mode", when(audio.ringerMode){AudioManager.RINGER_MODE_SILENT->"silent";AudioManager.RINGER_MODE_VIBRATE->"vibrate";else->"normal"})
             .put("local_time", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(java.time.ZonedDateTime.now()))
     }
