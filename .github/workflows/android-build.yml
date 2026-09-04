@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    branches: [main, v0.1-secure-pairing]
+    branches: [main, v0.1-secure-pairing, v2.0.0]
 
 jobs:
   build:
