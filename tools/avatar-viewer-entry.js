@@ -31,12 +31,13 @@ const clock = new THREE.Clock();
 function fitModel(object) {
   const box = new THREE.Box3().setFromObject(object);
   const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  object.position.sub(center);
   const height = Math.max(size.y, 0.001);
   const scale = 2.7 / height;
   object.scale.setScalar(scale);
   const fitted = new THREE.Box3().setFromObject(object);
+  const center = fitted.getCenter(new THREE.Vector3());
+  object.position.x -= center.x;
+  object.position.z -= center.z;
   object.position.y -= fitted.min.y + 1.35;
   camera.position.set(0, 0.05, 5.4);
   camera.lookAt(0, 0.05, 0);

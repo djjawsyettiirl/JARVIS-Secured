@@ -10,6 +10,10 @@ android {
         buildConfig = true
     }
 
+    androidResources {
+        noCompress += "glb"
+    }
+
     defaultConfig {
         applicationId = "com.jarvis.secured"
         minSdk = 26
