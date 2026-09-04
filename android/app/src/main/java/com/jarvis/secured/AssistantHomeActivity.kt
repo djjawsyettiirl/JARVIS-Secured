@@ -26,8 +26,12 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.webkit.WebView
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewClientCompat
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -117,13 +121,21 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         })
         root.addView(top)
 
+        val avatarAssets = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
         avatarView = WebView(this).apply {
             setBackgroundColor(Color.TRANSPARENT)
             settings.javaScriptEnabled = true
-            settings.allowFileAccess = true
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            webViewClient = object : WebViewClientCompat() {
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                    avatarAssets.shouldInterceptRequest(request.url)
+            }
             isVerticalScrollBarEnabled = false
             isHorizontalScrollBarEnabled = false
-            loadUrl("file:///android_asset/avatar/viewer.html?model=crimson-silk-empress.glb")
+            loadUrl("https://appassets.androidplatform.net/assets/avatar/viewer.html?model=crimson-silk-empress.glb")
         }
         root.addView(avatarView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(290)).apply {
             topMargin = dp(4)
