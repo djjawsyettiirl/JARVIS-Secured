@@ -52,5 +52,30 @@ class WindowsVoice:
                 self._synth.SpeakAsyncCancelAll()
             self._synth.SpeakAsync(text.strip())
 
+    def voices(self) -> list[dict[str, str]]:
+        """Return installed Windows voices without exposing .NET objects."""
+        _, _, _, SpeechSynthesizer = self._speech_types()
+        synth = SpeechSynthesizer()
+        try:
+            return [
+                {
+                    "id": str(item.VoiceInfo.Name),
+                    "name": str(item.VoiceInfo.Name),
+                    "culture": str(item.VoiceInfo.Culture),
+                    "gender": str(item.VoiceInfo.Gender),
+                }
+                for item in synth.GetInstalledVoices()
+                if bool(item.Enabled)
+            ]
+        finally:
+            synth.Dispose()
+
+    def select(self, voice_id: str) -> None:
+        _, _, _, SpeechSynthesizer = self._speech_types()
+        with self._lock:
+            if self._synth is None:
+                self._synth = SpeechSynthesizer()
+            self._synth.SelectVoice(voice_id)
+
 
 windows_voice = WindowsVoice()

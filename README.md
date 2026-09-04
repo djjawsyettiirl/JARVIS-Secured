@@ -2,7 +2,7 @@
 
 JARVIS is a private, multi-device assistant with a Windows home host and a paired Android companion. Windows manages device trust, internet search, messaging, and private updates. Android retains limited local abilities when the host is unavailable.
 
-> Current private release: **1.9.0**
+> Current private release: **2.0.0**
 >
 > Active development branch: **`v0.1-secure-pairing`**
 
@@ -11,6 +11,10 @@ JARVIS is a private, multi-device assistant with a Windows home host and a paire
 ### Windows and Android
 
 - A shared Ask JARVIS interface with voice input and spoken replies.
+- Locally rendered live 3D avatars with idle, listening, thinking, and speaking states (David Martinez on Windows; Crimson Silk Empress on Android).
+- Picture attachments from the Windows file picker or Android gallery.
+- Installed voice selection plus private custom voice-sample recording/upload controls.
+- Branded launch screens instead of an empty black startup window.
 - Web, Images, and Videos search tabs with short, clickable results.
 - Private SearXNG search with an optional SerpAPI fallback.
 - Private messaging between Windows and paired Android devices.
@@ -19,6 +23,7 @@ JARVIS is a private, multi-device assistant with a Windows home host and a paire
 
 ### Android
 
+- Keyboard-safe chat layout that keeps the composer visible while typing.
 - One-time secure pairing with automatic reconnection.
 - Persistent offline “Jarvis” wake-phrase detection through a visible foreground service.
 - Android default-assistant role support for configured gestures and buttons.

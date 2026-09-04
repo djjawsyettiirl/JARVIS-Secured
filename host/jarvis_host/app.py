@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import base64
+import re
 import secrets
 import socket
 import time
 from collections import defaultdict, deque
+from pathlib import Path
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
-from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi import FastAPI, File, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -19,6 +21,7 @@ from .online_assistant import online_assistant
 from .updater import updater
 from . import tunnel
 from .version import VERSION
+from .google_account import data_dir
 
 app = FastAPI(title="Assistant Jarvis Secure Host", version=VERSION)
 store = Store()
@@ -61,6 +64,9 @@ class MessageRequest(BaseModel):
 
 class DeviceNameRequest(BaseModel):
     name: str = Field(min_length=1, max_length=50)
+
+
+MOBILE_IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 
 def _load_public_key(pem: str):
@@ -240,6 +246,29 @@ def assistant(request: AssistantRequest, http_request: Request, authorization: s
         return respond(request.message, set(store.get_scopes(device_id)), request.search_type)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/media/images")
+async def mobile_image_upload(
+    http_request: Request,
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    if "chat" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the chat capability")
+    suffix = MOBILE_IMAGE_TYPES.get((file.content_type or "").lower())
+    if not suffix:
+        raise HTTPException(status_code=415, detail="Use a JPEG, PNG, or WebP image")
+    payload = await file.read(20 * 1024 * 1024 + 1)
+    if len(payload) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image exceeds the 20 MB limit")
+    stem = re.sub(r"[^a-zA-Z0-9_-]+", "-", Path(file.filename or "image").stem).strip("-")[:50] or "image"
+    target_dir = data_dir() / "images"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{stem}-{secrets.token_hex(6)}{suffix}"
+    target.write_bytes(payload)
+    return {"uploaded": True, "name": target.name, "message": "Image attached to this JARVIS session."}
 
 
 @app.post("/messages")
