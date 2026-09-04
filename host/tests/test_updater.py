@@ -55,6 +55,7 @@ def test_latest_build_selection_excludes_pull_request_artifacts(monkeypatch):
 
     assert updater._latest("android-build.yml") is None
     assert captured[captured.index("--event") + 1] == "push"
+    assert captured[captured.index("--branch") + 1] == "main"
 
 
 def test_stale_android_apk_is_not_reported_ready(monkeypatch, tmp_path):

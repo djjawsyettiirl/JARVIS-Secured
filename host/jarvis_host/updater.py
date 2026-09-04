@@ -16,7 +16,7 @@ from .version import VERSION
 from windows_process import hidden_process_kwargs
 
 REPOSITORY = "djjawsyettiirl/JARVIS-Secured"
-BRANCH = "v0.1-secure-pairing"
+BRANCH = "main"
 
 
 class Updater:
