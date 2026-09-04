@@ -1,8 +1,23 @@
 import os
+import sys
 import threading
 import time
 import traceback
 from datetime import datetime, timezone
+
+
+def _smoke_requested() -> bool:
+    return os.environ.get("JARVIS_SMOKE_TEST") == "1" or "--smoke-test" in sys.argv[1:]
+
+
+# Keep the packaged smoke path ahead of GUI, server, and application imports.
+# Importing that stack can initialize Windows components which should not be
+# part of the build artifact's bounded startup validation.
+if __name__ == "__main__" and _smoke_requested():
+    from jarvis_host.windows_voice import windows_voice
+
+    windows_voice.validate()
+    raise SystemExit(0)
 
 import uvicorn
 import webview
@@ -81,7 +96,7 @@ def _show_main_window(window) -> None:
 
 
 def main() -> None:
-    if os.environ.get("JARVIS_SMOKE_TEST") == "1":
+    if _smoke_requested():
         from jarvis_host.windows_voice import windows_voice
         windows_voice.validate()
         return
