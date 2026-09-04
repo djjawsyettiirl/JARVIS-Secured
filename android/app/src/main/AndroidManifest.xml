@@ -18,7 +18,7 @@
         android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:supportsRtl="true">
-        <activity android:name=".AssistantHomeActivity" android:exported="true" android:launchMode="singleTop" android:label="Assistant Jarvis">
+        <activity android:name=".AssistantHomeActivity" android:exported="true" android:launchMode="singleTop" android:windowSoftInputMode="adjustResize" android:label="Assistant Jarvis">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

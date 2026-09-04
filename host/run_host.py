@@ -74,6 +74,7 @@ def _show_main_window(window) -> None:
     try:
         time.sleep(0.5)
         window.show()
+        window.load_url("http://127.0.0.1:8766/assistant-v1")
         _startup_log("main window shown")
     except Exception:
         _startup_log("main window show failed\n" + traceback.format_exc())
@@ -103,14 +104,18 @@ def main() -> None:
     )
     threading.Thread(target=gateway_server.run, daemon=True).start()
 
-    time.sleep(0.8)
+    startup_html = f"""<!doctype html><html><head><meta charset='utf-8'><style>
+    html,body{{height:100%;margin:0;background:#02060b;color:#9beaff;font-family:'Segoe UI',sans-serif}}
+    body{{display:grid;place-items:center}}.core{{width:92px;height:92px;border:2px solid #37d7ff;border-right-color:transparent;border-radius:50%;box-shadow:0 0 48px #37d7ff88;animation:spin 1.1s linear infinite}}
+    .label{{margin-top:24px;text-align:center;letter-spacing:.25em;font-size:12px}}@keyframes spin{{to{{transform:rotate(360deg)}}}}
+    </style></head><body><div><div class='core'></div><div class='label'>INITIALIZING JARVIS V {VERSION}</div></div></body></html>"""
     window = webview.create_window(
         f"Assistant Jarvis · V {VERSION}",
-        "http://127.0.0.1:8766/assistant-v1",
+        html=startup_html,
         width=1280,
         height=860,
         min_size=(900, 650),
-        background_color="#08090c",
+        background_color="#02060b",
         text_select=True,
     )
     _startup_log("main window created")

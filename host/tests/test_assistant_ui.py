@@ -19,3 +19,13 @@ def test_assistant_ui_renders_up_to_three_clickable_sources():
     assert "link.href=source.url" in html
     assert "link.target='_blank'" in html
     assert "link.rel='noopener'" in html
+
+
+def test_v2_ui_includes_live_avatar_startup_and_upload_controls():
+    html = assistant_v1_home()
+    assert "INITIALIZING JARVIS" in html
+    assert "/avatar/viewer.html?model=david.fbx" in html
+    assert "setJarvisState" in html
+    assert 'accept="image/jpeg,image/png,image/webp"' in html
+    assert "/media/images" in html
+    assert "/voice/options" in html

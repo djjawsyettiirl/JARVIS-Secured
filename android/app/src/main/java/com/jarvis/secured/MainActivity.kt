@@ -19,6 +19,7 @@ import android.location.LocationManager
 import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
+import android.media.MediaRecorder
 import android.util.Base64
 import android.text.util.Linkify
 import android.text.method.LinkMovementMethod
@@ -31,6 +32,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Switch
+import android.widget.Spinner
+import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -91,6 +94,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var assistantReply: TextView
     private lateinit var inboxInput: EditText
     private lateinit var inboxMessages: TextView
+    private lateinit var voiceSpinner: Spinner
+    private lateinit var customVoiceStatus: TextView
+    private var recorder: MediaRecorder? = null
+    private var recordingFile: File? = null
+    private var recording = false
     private var sessionToken: String? = null
     private var tts: TextToSpeech? = null
     private val messageHandler = Handler(Looper.getMainLooper())
@@ -247,6 +255,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val ask = styleButton(Button(this).apply { text = "Ask JARVIS"; setOnClickListener { askJarvis() } })
         val speak = styleButton(Button(this).apply { text = "🎙 Speak"; setOnClickListener { startVoiceInput() } }, true)
         val update = styleButton(Button(this).apply { text = "Check private update"; setOnClickListener { installPrivateUpdate(false) } })
+        voiceSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Loading installed voices…"))
+        }
+        customVoiceStatus = TextView(this).apply { text="No custom voice sample saved."; textSize=13f; setTextColor(textMuted) }
+        val useVoice = styleButton(Button(this).apply { text="Use selected voice"; setOnClickListener { selectInstalledVoice() } })
+        val uploadVoice = styleButton(Button(this).apply { text="Upload voice sample"; setOnClickListener { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="audio/*";addCategory(Intent.CATEGORY_OPENABLE)},VOICE_SAMPLE_REQUEST) } }, true)
+        val recordVoice = styleButton(Button(this).apply {
+            text="Record voice sample"
+            setOnClickListener {
+                if(recording){stopVoiceRecording();text="Record voice sample"}else{startVoiceRecording();if(recording)text="Stop and save recording"}
+            }
+        })
         enableListeningButton = styleButton(Button(this).apply {
             text = "Enable always listening"
             setOnClickListener { enableAlwaysListening() }
@@ -292,6 +312,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         listOf(
             card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
             card("Voice activation", "Automatic when JARVIS is your default assistant. Otherwise, you can enable wake listening manually. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListeningButton, stopListeningButton), actionRow(defaultAssistantButton, batterySettings)),
+            card("Voice & avatar", "Choose any realistic voice installed on Android. Uploaded or recorded samples stay private on this phone for a configured custom-voice engine.", voiceSpinner, useVoice, customVoiceStatus, actionRow(recordVoice, uploadVoice)),
             card("Awareness", "Each category is private, separately controlled, and handled on this phone. Sensitive context is not silently sent to the host.", awarenessStatus, awarenessControls),
             card("App permissions", "Only access required by JARVIS features is requested. The setup button advances through any missing Android grants.", permissionStatus, actionRow(request, settings), update)
         ).forEach { section ->
@@ -303,6 +324,51 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         setContentView(scroll)
         refreshVoiceActivationStatus()
         refreshAwarenessStatus()
+    }
+
+    private fun refreshInstalledVoices() {
+        if(!::voiceSpinner.isInitialized)return
+        val voices=tts?.voices?.sortedBy{it.name}.orEmpty()
+        val labels=voices.map{"${it.name} · ${it.locale.displayName}"}
+        voiceSpinner.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,labels.ifEmpty{listOf("No installed voices found")})
+        voiceSpinner.tag=voices
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun selectInstalledVoice() {
+        val voices=voiceSpinner.tag as? List<android.speech.tts.Voice> ?: emptyList()
+        val selected=voices.getOrNull(voiceSpinner.selectedItemPosition)
+        if(selected!=null && tts?.setVoice(selected)==TextToSpeech.SUCCESS){
+            getSharedPreferences("jarvis",MODE_PRIVATE).edit().putString("tts_voice",selected.name).apply()
+            customVoiceStatus.text="Active Android voice: ${selected.name}"
+            tts?.speak("Voice preview ready.",TextToSpeech.QUEUE_FLUSH,null,"voice-preview")
+        } else customVoiceStatus.text="That voice could not be selected."
+    }
+
+    private fun voiceSampleDirectory()=File(filesDir,"voice-samples").apply{mkdirs()}
+
+    private fun saveVoiceSample(uri:Uri) {
+        try {
+            val target=File(voiceSampleDirectory(),"uploaded-${System.currentTimeMillis()}.audio")
+            contentResolver.openInputStream(uri)?.use{input->target.outputStream().use{output->input.copyTo(output)}} ?: error("The audio file could not be opened")
+            customVoiceStatus.text="Custom voice sample saved: ${target.name}"
+        } catch(e:Exception){customVoiceStatus.text="Voice sample failed: ${e.message}"}
+    }
+
+    @Suppress("DEPRECATION")
+    private fun startVoiceRecording() {
+        if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO),PERMISSION_REQUEST);return}
+        try {
+            val target=File(voiceSampleDirectory(),"recorded-${System.currentTimeMillis()}.m4a")
+            recorder=MediaRecorder().apply{setAudioSource(MediaRecorder.AudioSource.MIC);setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);setAudioEncoder(MediaRecorder.AudioEncoder.AAC);setOutputFile(target.absolutePath);prepare();start()}
+            recordingFile=target;recording=true;customVoiceStatus.text="Recording voice sample…"
+        } catch(e:Exception){recorder?.release();recorder=null;customVoiceStatus.text="Recording failed: ${e.message}"}
+    }
+
+    private fun stopVoiceRecording() {
+        if(!recording)return
+        try{recorder?.stop();customVoiceStatus.text="Custom voice sample saved: ${recordingFile?.name}"}catch(e:Exception){recordingFile?.delete();customVoiceStatus.text="Recording was too short; try again."}
+        finally{recorder?.release();recorder=null;recording=false}
     }
 
     private fun permissionRequests(): Array<String> {
@@ -954,10 +1020,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (AlwaysListeningService.isDefaultAssistant(this)) enableAlwaysListening(manual = false)
             refreshVoiceActivationStatus()
         }
+        if (requestCode == VOICE_SAMPLE_REQUEST && resultCode == RESULT_OK) data?.data?.let { saveVoiceSample(it) }
     }
 
     override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) tts?.language = Locale.getDefault()
+        if (status == TextToSpeech.SUCCESS) {
+            tts?.language = Locale.getDefault()
+            val saved=getSharedPreferences("jarvis",MODE_PRIVATE).getString("tts_voice",null)
+            if(saved!=null)tts?.voices?.firstOrNull{it.name==saved}?.let{tts?.voice=it}
+            refreshInstalledVoices()
+        }
     }
 
     override fun onDestroy() {
@@ -967,6 +1039,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         updateHandler.removeCallbacksAndMessages(null)
         tts?.stop()
         tts?.shutdown()
+        if(recording)stopVoiceRecording()
         super.onDestroy()
     }
 
@@ -975,5 +1048,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val PERMISSION_REQUEST = 1001
         private const val VOICE_REQUEST = 1002
         private const val ASSISTANT_ROLE_REQUEST = 1003
+        private const val VOICE_SAMPLE_REQUEST = 1004
     }
 }
