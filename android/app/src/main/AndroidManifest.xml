@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
@@ -26,6 +27,7 @@
         </activity>
         <activity android:name=".MainActivity" android:exported="true" android:label="Assistant Jarvis Settings" />
         <activity android:name=".ConnectionManagerActivity" android:exported="false" android:label="Assistant Jarvis Connections" />
+        <receiver android:name=".PrivateUpdateResultReceiver" android:exported="false" />
         <service
             android:name=".RoutePushService"
             android:exported="false"

@@ -36,7 +36,6 @@ import android.widget.Spinner
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -988,14 +987,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         if (!automatic) runOnUiThread { assistantReply.text = "Android JARVIS is already up to date." }
                         return@use
                     }
-                    val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", apk)
-                    runOnUiThread {
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "application/vnd.android.package-archive")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        startActivity(intent)
-                        assistantReply.text = "Android is ready to confirm the private JARVIS update."
+                    PrivateUpdateInstaller.install(this, apk)
+                    if (!automatic) runOnUiThread {
+                        assistantReply.text = "JARVIS submitted the update for automatic installation."
                     }
                 }
             } catch (e: Exception) {

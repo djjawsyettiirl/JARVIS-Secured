@@ -9,6 +9,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.security.KeyStore
 import java.security.Signature
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class BackgroundJarvisClient(private val context: Context) {
@@ -70,6 +71,47 @@ class BackgroundJarvisClient(private val context: Context) {
             }
         }
         DirectSerpApiSearch.search(context, command)?.let { return it }
+        throw lastError ?: IllegalStateException("No reachable JARVIS host")
+    }
+
+    fun downloadUpdateIfAvailable(): File? {
+        val deviceId = prefs.getString("device_id", null) ?: return null
+        val installed = PrivateUpdateInstaller.versionCode(context) ?: return null
+        var lastError: Exception? = null
+        for (route in routes()) {
+            try {
+                val session = token(route, deviceId)
+                val statusRequest = Request.Builder().url("$route/updates/android/status")
+                    .header("Authorization", "Bearer $session").get().build()
+                val status = http.newCall(statusRequest).execute().use { response ->
+                    val body = response.body?.string() ?: "{}"
+                    if (!response.isSuccessful) error(JSONObject(body).optString("detail", "Update check failed"))
+                    JSONObject(body)
+                }
+                if (!status.optBoolean("available", false)) return null
+                val candidate = status.optJSONObject("build")?.optLong("version_code", 0L) ?: 0L
+                if (candidate <= installed) return null
+
+                val request = Request.Builder().url("$route/updates/android")
+                    .header("Authorization", "Bearer $session").get().build()
+                val directory = File(context.cacheDir, "updates").apply { mkdirs() }
+                val apk = File(directory, "JARVIS-update.apk")
+                http.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) error("Update download failed")
+                    response.body?.byteStream()?.use { input ->
+                        apk.outputStream().use { output -> input.copyTo(output) }
+                    } ?: error("Update download was empty")
+                }
+                if (PrivateUpdateInstaller.versionCode(context, apk.absolutePath) != candidate) {
+                    apk.delete()
+                    error("Downloaded update version does not match its manifest")
+                }
+                prefs.edit().putString("active_host", route).apply()
+                return apk
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
         throw lastError ?: IllegalStateException("No reachable JARVIS host")
     }
 }
