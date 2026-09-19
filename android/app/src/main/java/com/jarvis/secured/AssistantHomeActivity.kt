@@ -30,6 +30,9 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import okhttp3.MediaType.Companion.toMediaType
@@ -72,6 +75,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         buildUi()
         restoreQueuedMessages()
         tts = TextToSpeech(this, this)
@@ -106,8 +110,18 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val muted = Color.parseColor("#8B96A7")
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(36), dp(18), dp(52))
             setBackgroundColor(Color.parseColor("#05070A"))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(
+                dp(18) + systemBars.left,
+                dp(12) + systemBars.top,
+                dp(18) + systemBars.right,
+                dp(12) + maxOf(systemBars.bottom, keyboard.bottom)
+            )
+            insets
         }
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(2),0,dp(2),dp(6)) }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
