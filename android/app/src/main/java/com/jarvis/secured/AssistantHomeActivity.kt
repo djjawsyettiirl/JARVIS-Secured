@@ -22,6 +22,7 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -108,11 +109,37 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun buildUi() {
         val primary = Color.parseColor("#F4F7FB")
         val muted = Color.parseColor("#8B96A7")
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val root = FrameLayout(this).apply {
             setBackgroundColor(Color.parseColor("#05070A"))
         }
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+        val avatarAssets = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+        avatarView = WebView(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            settings.javaScriptEnabled = true
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            webViewClient = object : WebViewClientCompat() {
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                    avatarAssets.shouldInterceptRequest(request.url)
+            }
+            isVerticalScrollBarEnabled = false
+            isHorizontalScrollBarEnabled = false
+            isFocusable = false
+            isFocusableInTouchMode = false
+            loadUrl("https://appassets.androidplatform.net/assets/avatar/viewer.html?model=crimson-silk-empress.glb")
+        }
+        root.addView(avatarView, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.TRANSPARENT)
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
             view.setPadding(
@@ -133,33 +160,12 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             text="⚙"; textSize=20f; isAllCaps=false; minWidth=dp(50); minHeight=dp(46); background=rounded("#151A22",18,"#252C37"); setTextColor(primary)
             setOnClickListener { startActivity(Intent(this@AssistantHomeActivity, MainActivity::class.java)) }
         })
-        root.addView(top)
-
-        val avatarAssets = WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
-            .build()
-        avatarView = WebView(this).apply {
-            setBackgroundColor(Color.TRANSPARENT)
-            settings.javaScriptEnabled = true
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            webViewClient = object : WebViewClientCompat() {
-                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                    avatarAssets.shouldInterceptRequest(request.url)
-            }
-            isVerticalScrollBarEnabled = false
-            isHorizontalScrollBarEnabled = false
-            loadUrl("https://appassets.androidplatform.net/assets/avatar/viewer.html?model=crimson-silk-empress.glb")
-        }
-        root.addView(avatarView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(290)).apply {
-            topMargin = dp(4)
-            bottomMargin = dp(2)
-        })
+        content.addView(top)
 
         greeting = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; gravity=Gravity.CENTER; setPadding(dp(12),dp(34),dp(12),dp(24)) }
         greeting.addView(TextView(this).apply { text="What can I do for you?"; textSize=30f; setTextColor(primary); setTypeface(typeface,Typeface.BOLD); gravity=Gravity.CENTER })
         greeting.addView(TextView(this).apply { text="Ask Jarvis or message Home from the same bar."; textSize=14f; setTextColor(muted); gravity=Gravity.CENTER; setPadding(0,dp(8),0,0) })
-        root.addView(greeting)
+        content.addView(greeting)
 
         searchTabs = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.START; visibility=View.GONE; setPadding(0,0,0,dp(7)) }
         listOf("web" to "Web", "images" to "Images", "videos" to "Videos").forEach { (kind,label) ->
@@ -168,11 +174,11 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 setOnClickListener { selectSearchType(kind) }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,dp(40)).apply{marginEnd=dp(7)})
         }
-        root.addView(searchTabs)
+        content.addView(searchTabs)
 
         conversation = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; gravity=Gravity.BOTTOM; setPadding(0,dp(4),0,dp(10)) }
         conversationScroll = ScrollView(this).apply { isFillViewport=true; clipToPadding=false; addView(conversation, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT)) }
-        root.addView(conversationScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
+        content.addView(conversationScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
 
         val bar = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(7),dp(6),dp(7),dp(6)); background=rounded("#14181E",30,"#2A313B") }
         targetButton = Button(this).apply {
@@ -189,7 +195,6 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setPadding(dp(12),dp(8),dp(8),dp(8)); maxLines=4; minHeight=dp(48); imeOptions=EditorInfo.IME_ACTION_SEND; setSingleLine(false)
             setOnEditorActionListener { _, actionId, _ -> if (actionId==EditorInfo.IME_ACTION_SEND) { sendCurrent(); true } else false }
             setOnFocusChangeListener { _, focused ->
-                avatarView.visibility = if(focused) View.GONE else View.VISIBLE
                 if(focused) greeting.visibility = View.GONE
                 conversationScroll.post { conversationScroll.fullScroll(View.FOCUS_DOWN) }
             }
@@ -197,8 +202,12 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         bar.addView(composer, LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
         bar.addView(Button(this).apply { text="🎙"; textSize=18f; setTextColor(primary); background=rounded("#222936",24); setOnClickListener{startVoice()} }, LinearLayout.LayoutParams(dp(50),dp(50)).apply{marginStart=dp(4)})
         bar.addView(Button(this).apply { text="➤"; textSize=18f; setTextColor(Color.WHITE); background=rounded("#3269D8",24); setOnClickListener{sendCurrent()} }, LinearLayout.LayoutParams(dp(50),dp(50)).apply{marginStart=dp(6)})
-        root.addView(bar)
-        root.addView(TextView(this).apply { text="Assistant Jarvis · V ${BuildConfig.VERSION_NAME}"; textSize=10.5f; setTextColor(Color.parseColor("#596271")); gravity=Gravity.CENTER; setPadding(0,dp(7),0,0) })
+        content.addView(bar)
+        content.addView(TextView(this).apply { text="Assistant Jarvis · V ${BuildConfig.VERSION_NAME}"; textSize=10.5f; setTextColor(Color.parseColor("#596271")); gravity=Gravity.CENTER; setPadding(0,dp(7),0,0) })
+        root.addView(content, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
         setContentView(root)
     }
 
