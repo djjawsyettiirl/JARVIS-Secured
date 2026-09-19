@@ -1,1 +1,2 @@
 android/app/src/main/assets/model-en-us/** -text whitespace=-trailing-space,-blank-at-eof
+host/assets/avatar/*.glb -text

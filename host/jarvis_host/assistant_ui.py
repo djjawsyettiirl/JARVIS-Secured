@@ -42,7 +42,7 @@ async def _save_upload(file: UploadFile, types: dict[str, str], folder: str, max
 
 @router.get("/avatar/{name}")
 def avatar_asset(name: str):
-    if name not in {"viewer.html", "viewer.js", "david.fbx", "david.png", "A_Mistake.png"}:
+    if name not in {"viewer.html", "viewer.js", "david-martinez.glb", "david.fbx", "david.png", "A_Mistake.png"}:
         raise HTTPException(404, "Avatar asset not found")
     return FileResponse(ASSET_DIR / name)
 
@@ -90,7 +90,7 @@ button{border:1px solid var(--line);background:#101d29;color:var(--text);border-
 </style></head><body><div id="splash" class="splash"><div><div class="splash-core"></div><div class="splash-copy">INITIALIZING JARVIS</div></div></div><div class="shell">
 <div class="top"><div><div class="brand">JARVIS</div><div class="version">SYSTEM V __JARVIS_VERSION__</div></div><div class="spacer"></div><button class="settings" onclick="toggleSettings()" title="Voice and avatar settings">⚙ Customize</button><button class="settings" onclick="location.href='/'" title="System settings">System</button></div>
 <div id="status" class="status">● Windows host online</div>
-<div class="hero"><div class="avatar-shell"><iframe id="avatar" title="David live avatar" src="/avatar/viewer.html?model=david.fbx"></iframe></div><div class="conversation"><h1>What can I do for you?</h1><p>David is online and ready.</p><div id="tabs" class="tabs" hidden><button data-kind="web" class="active">Web</button><button data-kind="images">Images</button><button data-kind="videos">Videos</button></div><div id="reply" class="reply">Systems ready.</div></div></div>
+<div class="hero"><div class="avatar-shell"><iframe id="avatar" title="David live avatar" src="/avatar/viewer.html?model=david-martinez.glb"></iframe></div><div class="conversation"><h1>What can I do for you?</h1><p>David is online and ready.</p><div id="tabs" class="tabs" hidden><button data-kind="web" class="active">Web</button><button data-kind="images">Images</button><button data-kind="videos">Videos</button></div><div id="reply" class="reply">Systems ready.</div></div></div>
 <div id="modeLabel" class="mode-label">Mode: Ask Jarvis</div>
 <div class="composer"><button id="target" class="target" onclick="toggleTarget()">Ask Jarvis</button><input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadImage(this)"><button class="round" onclick="imageInput.click()" title="Attach picture">＋</button><input id="message" type="text" placeholder="Ask Jarvis anything…" autocomplete="off"><button class="round" onclick="voice()">🎙</button><button class="round send" onclick="send()">➤</button></div>
 <div class="foot">Assistant Jarvis · V __JARVIS_VERSION__</div></div>
