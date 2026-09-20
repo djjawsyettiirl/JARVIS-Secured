@@ -20,6 +20,7 @@ JARVIS is a private, multi-device assistant with a Windows home host and a paire
 - Private messaging between Windows and paired Android devices.
 - Signed, matched Windows and Android automatic updates.
 - Custom JARVIS branding on both platforms.
+- Permission-gated Coding Mode for proposing multi-language project changes, previewing diffs, and applying only approved edits.
 
 ### Android
 
@@ -42,6 +43,13 @@ JARVIS is a private, multi-device assistant with a Windows home host and a paire
 - Sensitive awareness data stays on Android by default.
 - Screen context is opt-in through an explicitly enabled accessibility service.
 - Unneeded camera, contacts, call-log, SMS, and storage permissions are not requested.
+- Coding projects are confined to the configured JARVIS workspace; paired devices need the separate `coding` capability, and applying a preview also requires `files_write`.
+
+## Coding Mode
+
+Windows hosts Coding Mode so Android can request changes without compiling on the phone. Set `JARVIS_CODING_API_KEY` and optionally `JARVIS_CODING_API_URL`, `JARVIS_CODING_MODEL`, and `JARVIS_CODING_WORKSPACE` on the Windows host. The default workspace is `JARVIS Projects` in the Windows user's home folder.
+
+Coding Mode sends a bounded set of UTF-8 project files to the configured OpenAI-compatible coding model. It supports any text-based language the selected model understands. Generated binaries, secrets, `.git` contents, dependency folders, and paths outside the workspace are excluded. Every proposal returns a diff and an expiring change ID; no file is written until the user approves that exact change. Devices require `coding` to request previews and both `coding` and `files_write` to apply them.
 
 ## Getting started
 

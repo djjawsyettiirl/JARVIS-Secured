@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from .google_account import data_dir
 from .windows_voice import windows_voice
 from .version import VERSION
+from .coding_assistant import coding_assistant
 
 router = APIRouter()
 ASSET_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1])) / "assets" / "avatar"
@@ -18,6 +19,15 @@ ALLOWED_VOICE_TYPES = {"audio/wav": ".wav", "audio/mpeg": ".mp3", "audio/mp4": "
 
 class VoiceSelection(BaseModel):
     voice_id: str = Field(min_length=1, max_length=200)
+
+
+class CodingProposal(BaseModel):
+    instruction: str = Field(min_length=3, max_length=8000)
+    project: str = Field(min_length=1, max_length=160)
+
+
+class CodingApproval(BaseModel):
+    change_id: str = Field(min_length=10, max_length=200)
 
 
 def _safe_upload_name(filename: str, suffix: str) -> str:
@@ -73,6 +83,31 @@ async def upload_custom_voice(file: UploadFile = File(...)):
     return {"uploaded": True, "name": saved.name, "status": "sample_saved"}
 
 
+@router.get("/coding/status")
+def local_coding_status():
+    return {
+        "model_configured": coding_assistant.configured(),
+        "workspace": str(coding_assistant.workspace_root),
+        "approval_required": True,
+    }
+
+
+@router.post("/coding/propose")
+def local_coding_propose(request: CodingProposal):
+    try:
+        return coding_assistant.propose(request.instruction.strip(), request.project.strip())
+    except Exception as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/coding/apply")
+def local_coding_apply(request: CodingApproval):
+    try:
+        return coding_assistant.apply(request.change_id)
+    except Exception as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @router.get('/assistant-v1', response_class=HTMLResponse)
 def assistant_v1_home():
     return '''<!doctype html>
@@ -94,24 +129,27 @@ button{border:1px solid var(--line);background:#101d29;color:var(--text);border-
 <div id="modeLabel" class="mode-label">Mode: Ask Jarvis</div>
 <div class="composer"><button id="target" class="target" onclick="toggleTarget()">Ask Jarvis</button><input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadImage(this)"><button class="round" onclick="imageInput.click()" title="Attach picture">＋</button><input id="message" type="text" placeholder="Ask Jarvis anything…" autocomplete="off"><button class="round" onclick="voice()">🎙</button><button class="round send" onclick="send()">➤</button></div>
 <div class="foot">Assistant Jarvis · V __JARVIS_VERSION__</div></div>
-<aside id="drawer" class="drawer" hidden><h2>Customize JARVIS</h2><div class="version">Live avatar: David Martinez</div><label>Installed Windows voice<select id="voiceSelect"></select></label><button onclick="selectVoice()">Use selected voice</button><label>Upload a custom voice sample<input id="customVoice" type="file" accept="audio/wav,audio/mpeg,audio/mp4,audio/ogg"></label><button onclick="uploadVoice()">Save voice sample</button><p class="version">Voice samples stay on this PC. Creating a cloned voice requires a separately configured voice engine and explicit approval.</p></aside>
+<aside id="drawer" class="drawer" hidden><h2>Customize JARVIS</h2><div class="version">Live avatar: David Martinez</div><label>Installed Windows voice<select id="voiceSelect"></select></label><button onclick="selectVoice()">Use selected voice</button><label>Upload a custom voice sample<input id="customVoice" type="file" accept="audio/wav,audio/mpeg,audio/mp4,audio/ogg"></label><button onclick="uploadVoice()">Save voice sample</button><p class="version">Voice samples stay on this PC. Creating a cloned voice requires a separately configured voice engine and explicit approval.</p><hr style="border-color:var(--line);margin:20px 0"><h2>Coding Mode</h2><label>Project folder inside JARVIS Projects<input id="codeProject" value="My Project" maxlength="160"></label><p id="codingStatus" class="version">Checking coding model…</p></aside>
 <script>
-let homeMode=false,lastQuery='',searchType='web';const input=document.getElementById('message'),reply=document.getElementById('reply'),target=document.getElementById('target'),modeLabel=document.getElementById('modeLabel'),tabs=document.getElementById('tabs'),avatar=document.getElementById('avatar');
+let mode=0,lastQuery='',searchType='web',pendingChange='';const input=document.getElementById('message'),reply=document.getElementById('reply'),target=document.getElementById('target'),modeLabel=document.getElementById('modeLabel'),tabs=document.getElementById('tabs'),avatar=document.getElementById('avatar');
 window.addEventListener('load',()=>setTimeout(()=>document.getElementById('splash').classList.add('done'),650));
 function avatarState(state){try{avatar.contentWindow.setJarvisState(state)}catch(_){}}
-function toggleSettings(){const d=document.getElementById('drawer');d.hidden=!d.hidden;if(!d.hidden)loadVoices()}
+function toggleSettings(){const d=document.getElementById('drawer');d.hidden=!d.hidden;if(!d.hidden){loadVoices();loadCodingStatus()}}
 input.addEventListener('keydown',e=>{if(e.key==='Enter')send()});
-function toggleTarget(){homeMode=!homeMode;target.textContent=homeMode?'Message Devices':'Ask Jarvis';modeLabel.textContent=homeMode?'Mode: Message paired devices':'Mode: Ask Jarvis';input.placeholder=homeMode?'Type a message for paired devices…':'Ask Jarvis anything…';input.focus()}
+function toggleTarget(){mode=(mode+1)%3;const labels=['Ask Jarvis','Message Devices','Coding Mode'],descriptions=['Mode: Ask Jarvis','Mode: Message paired devices','Mode: Preview code changes before approval'],placeholders=['Ask Jarvis anything…','Type a message for paired devices…','Describe the code change you want…'];target.textContent=labels[mode];modeLabel.textContent=descriptions[mode];input.placeholder=placeholders[mode];input.focus()}
 function showAssistant(data){reply.textContent=data.reply||'Done.';tabs.hidden=!(data.sources||[]).length;for(const source of (data.sources||[]).slice(0,3)){if(source.thumbnail){const image=document.createElement('img');image.src=source.thumbnail;image.alt='';image.loading='lazy';reply.appendChild(image)}const link=document.createElement('a');link.href=source.url;link.target='_blank';link.rel='noopener';link.textContent=source.title||source.url;reply.appendChild(link)}}
 async function runSearch(message){reply.textContent='Thinking…';avatarState('thinking');try{const response=await fetch('/assistant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,search_type:searchType})});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Request failed');showAssistant(data);avatarState('speaking');await speak(data.reply||'')}catch(e){reply.textContent='Assistant Jarvis error: '+e.message}finally{setTimeout(()=>avatarState('idle'),900)}}
 for(const button of tabs.querySelectorAll('button'))button.addEventListener('click',()=>{searchType=button.dataset.kind;for(const item of tabs.querySelectorAll('button'))item.classList.toggle('active',item===button);if(lastQuery)runSearch(lastQuery)});
-async function send(){const message=input.value.trim();if(!message)return;input.value='';if(!homeMode){lastQuery=message;runSearch(message);return}reply.textContent='Sending message to paired devices…';try{const response=await fetch('/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Request failed');reply.textContent='You → paired devices\\n'+message}catch(e){reply.textContent='Assistant Jarvis error: '+e.message}}
-async function voice(){reply.textContent=homeMode?'Listening for device message…':'Listening for Jarvis request…';avatarState('listening');try{const r=await fetch('/voice/listen',{method:'POST'}),d=await r.json();if(!r.ok)throw new Error(d.detail||'Voice failed');input.value=d.transcript||'';send()}catch(e){reply.textContent='Microphone error: '+e.message;avatarState('idle')}}
+async function send(){const message=input.value.trim();if(!message)return;input.value='';if(mode===0){lastQuery=message;runSearch(message);return}if(mode===2){runCoding(message);return}reply.textContent='Sending message to paired devices…';try{const response=await fetch('/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Request failed');reply.textContent='You → paired devices\\n'+message}catch(e){reply.textContent='Assistant Jarvis error: '+e.message}}
+async function voice(){reply.textContent=mode===1?'Listening for device message…':mode===2?'Listening for coding request…':'Listening for Jarvis request…';avatarState('listening');try{const r=await fetch('/voice/listen',{method:'POST'}),d=await r.json();if(!r.ok)throw new Error(d.detail||'Voice failed');input.value=d.transcript||'';send()}catch(e){reply.textContent='Microphone error: '+e.message;avatarState('idle')}}
 async function speak(text){if(!text)return;try{await fetch('/voice/speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,queue:false})})}catch(_){}}
 const seen=new Set();let initialized=false;async function inbox(){try{const items=await(await fetch('/messages/recent')).json();for(const item of [...items].reverse()){if(!seen.has(item.message_id)){seen.add(item.message_id);if(initialized&&item.sender_device_id!=='home'){const text=(item.sender_name||'Paired device')+': '+item.body;reply.textContent=text;speak(text)}}}initialized=true}catch(_){}}
 async function uploadImage(el){const file=el.files[0];if(!file)return;const form=new FormData();form.append('file',file);reply.textContent='Uploading '+file.name+'…';const r=await fetch('/media/images',{method:'POST',body:form});const d=await r.json();reply.textContent=r.ok?'Picture attached: '+d.name:'Upload failed: '+(d.detail||'unknown error');el.value=''}
 async function loadVoices(){const select=document.getElementById('voiceSelect');select.innerHTML='<option>Loading…</option>';try{const d=await(await fetch('/voice/options')).json();select.innerHTML=d.voices.map(v=>`<option value="${v.id}">${v.name} · ${v.gender} · ${v.culture}</option>`).join('')||'<option>No Windows voices found</option>'}catch(e){select.innerHTML='<option>Voice service unavailable</option>'}}
 async function selectVoice(){const id=document.getElementById('voiceSelect').value;const r=await fetch('/voice/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({voice_id:id})});reply.textContent=r.ok?'Voice changed to '+id:'Could not change voice'}
 async function uploadVoice(){const el=document.getElementById('customVoice'),file=el.files[0];if(!file)return;const form=new FormData();form.append('file',file);const r=await fetch('/voice/custom',{method:'POST',body:form});const d=await r.json();reply.textContent=r.ok?'Voice sample saved: '+d.name:'Voice upload failed: '+(d.detail||'unknown error');el.value=''}
+async function loadCodingStatus(){try{const d=await(await fetch('/coding/status')).json();document.getElementById('codingStatus').textContent=d.model_configured?'Coding model ready · approval required':'Add JARVIS_CODING_API_KEY on Windows to enable proposals'}catch(e){document.getElementById('codingStatus').textContent='Coding Mode status unavailable'}}
+async function runCoding(instruction){const project=document.getElementById('codeProject').value.trim()||'My Project';reply.textContent='Inspecting project and preparing a preview…';avatarState('thinking');try{const r=await fetch('/coding/propose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction,project})}),d=await r.json();if(!r.ok)throw new Error(d.detail||'Coding request failed');pendingChange=d.change_id;reply.textContent='Proposed changes — review before applying:\\n\\n'+d.files.map(f=>f.diff).join('\\n');const approve=document.createElement('button');approve.textContent='Approve and apply these changes';approve.onclick=applyCoding;reply.appendChild(approve)}catch(e){reply.textContent='Coding Mode error: '+e.message}finally{setTimeout(()=>avatarState('idle'),900)}}
+async function applyCoding(){if(!pendingChange)return;reply.textContent='Applying approved changes…';try{const r=await fetch('/coding/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({change_id:pendingChange})}),d=await r.json();if(!r.ok)throw new Error(d.detail||'Apply failed');pendingChange='';reply.textContent='Applied to '+d.project+':\\n'+d.files.join('\\n')}catch(e){reply.textContent='Coding Mode error: '+e.message}}
 inbox();setInterval(inbox,2500);
 </script></body></html>'''.replace("__JARVIS_VERSION__", VERSION)
