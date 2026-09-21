@@ -20,7 +20,7 @@ android {
         targetSdk = 35
         val ciBuildNumber = System.getenv("JARVIS_BUILD_NUMBER")?.toIntOrNull() ?: 0
         versionCode = 2_000_000 + ciBuildNumber
-        versionName = "2.1.1"
+        versionName = rootProject.file("../VERSION").readText().trim()
     }
 
     flavorDimensions += "distribution"
