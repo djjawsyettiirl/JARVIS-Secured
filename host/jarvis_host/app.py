@@ -22,6 +22,7 @@ from .updater import updater
 from . import tunnel
 from .version import VERSION
 from .google_account import data_dir
+from .coding_assistant import coding_assistant
 
 app = FastAPI(title="Assistant Jarvis Secure Host", version=VERSION)
 store = Store()
@@ -64,6 +65,15 @@ class MessageRequest(BaseModel):
 
 class DeviceNameRequest(BaseModel):
     name: str = Field(min_length=1, max_length=50)
+
+
+class CodingProposalRequest(BaseModel):
+    instruction: str = Field(min_length=3, max_length=8000)
+    project: str = Field(min_length=1, max_length=160)
+
+
+class CodingApplyRequest(BaseModel):
+    change_id: str = Field(min_length=10, max_length=200)
 
 
 MOBILE_IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
@@ -244,6 +254,50 @@ def assistant(request: AssistantRequest, http_request: Request, authorization: s
         raise HTTPException(status_code=403, detail="This device does not have the chat capability")
     try:
         return respond(request.message, set(store.get_scopes(device_id)), request.search_type)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/coding/status")
+def coding_status(http_request: Request, authorization: str | None = Header(default=None)):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    if "coding" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the coding capability")
+    return {
+        "enabled": True,
+        "model_configured": coding_assistant.configured(),
+        "workspace": str(coding_assistant.workspace_root),
+        "approval_required": True,
+    }
+
+
+@app.post("/coding/propose")
+def coding_propose(
+    request: CodingProposalRequest,
+    http_request: Request,
+    authorization: str | None = Header(default=None),
+):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    if "coding" not in store.get_scopes(device_id):
+        raise HTTPException(status_code=403, detail="This device does not have the coding capability")
+    try:
+        return coding_assistant.propose(request.instruction.strip(), request.project.strip())
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/coding/apply")
+def coding_apply(
+    request: CodingApplyRequest,
+    http_request: Request,
+    authorization: str | None = Header(default=None),
+):
+    device_id = _authenticated_device(authorization, _route_kind(http_request))
+    scopes = set(store.get_scopes(device_id))
+    if "coding" not in scopes or "files_write" not in scopes:
+        raise HTTPException(status_code=403, detail="Coding and files_write capabilities are required")
+    try:
+        return coding_assistant.apply(request.change_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

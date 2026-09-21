@@ -23,6 +23,7 @@ current_pairing_code = ""
 VISIBLE_SCOPES = {
     "chat", "google_gmail", "google_calendar", "maps", "alarms",
     "messaging", "location_share", "software_updates", "offline_search",
+    "coding", "files_write",
 }
 
 
