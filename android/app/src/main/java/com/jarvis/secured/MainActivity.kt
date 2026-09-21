@@ -35,6 +35,7 @@ import android.widget.Switch
 import android.widget.Spinner
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -95,6 +96,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var inboxMessages: TextView
     private lateinit var voiceSpinner: Spinner
     private lateinit var customVoiceStatus: TextView
+    private lateinit var cloudEndpoint: EditText
+    private lateinit var cloudApiKey: EditText
+    private lateinit var cloudChatModel: EditText
+    private lateinit var cloudImageModel: EditText
+    private lateinit var cloudStatus: TextView
     private var recorder: MediaRecorder? = null
     private var recordingFile: File? = null
     private var recording = false
@@ -254,6 +260,26 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val ask = styleButton(Button(this).apply { text = "Ask JARVIS"; setOnClickListener { askJarvis() } })
         val speak = styleButton(Button(this).apply { text = "🎙 Speak"; setOnClickListener { startVoiceInput() } }, true)
         val update = styleButton(Button(this).apply { text = "Check private update"; setOnClickListener { installPrivateUpdate(false) } })
+        val cloud = SecureCloudCredentials.load(this)
+        cloudEndpoint = styleInput(EditText(this).apply {
+            hint = "OpenAI-compatible HTTPS endpoint"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setText(cloud?.endpoint ?: "https://api.openai.com/v1")
+        })
+        cloudApiKey = styleInput(EditText(this).apply {
+            hint = if (cloud == null) "Provider API key" else "API key saved — leave blank to keep it"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        })
+        cloudChatModel = styleInput(EditText(this).apply { hint = "Chat model"; setText(cloud?.chatModel ?: "gpt-4.1-mini") })
+        cloudImageModel = styleInput(EditText(this).apply { hint = "Image model"; setText(cloud?.imageModel ?: "gpt-image-1") })
+        cloudStatus = TextView(this).apply {
+            text = if (cloud == null) "Standalone cloud AI is not configured." else "Standalone cloud AI is configured."
+            textSize = 14f; setTextColor(textMuted)
+        }
+        val saveCloud = styleButton(Button(this).apply { text = "Save & test standalone AI"; setOnClickListener { saveAndTestCloud() } })
+        val clearCloud = styleButton(Button(this).apply { text = "Remove cloud credentials"; setOnClickListener {
+            SecureCloudCredentials.clear(this@MainActivity); cloudApiKey.text.clear(); cloudStatus.text = "Standalone cloud AI is not configured."
+        } }, true)
         voiceSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Loading installed voices…"))
         }
@@ -306,15 +332,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         renderInbox()
 
+        val adultStatus = TextView(this).apply {
+            textSize = 14f; setTextColor(textMuted)
+            text = adultModeStatus()
+        }
+        val configureAdult = styleButton(Button(this).apply {
+            text = "Set up 18+ mode"
+            setOnClickListener { showAdultSetup(adultStatus) }
+        })
+        val lockAdult = styleButton(Button(this).apply {
+            text = "Lock 18+ mode"
+            setOnClickListener { AdultModeManager.lock(this@MainActivity); adultStatus.text = adultModeStatus() }
+        }, true)
+
         root.addView(title)
         root.addView(subtitle)
-        listOf(
+        val sections = mutableListOf(
+            card("Standalone AI", "Runs directly from this phone without Windows. Credentials are encrypted by Android Keystore and sent only to the HTTPS provider you choose.", cloudStatus, cloudEndpoint, cloudApiKey, cloudChatModel, cloudImageModel, actionRow(saveCloud, clearCloud)),
             card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
             card("Voice activation", "Automatic when JARVIS is your default assistant. Otherwise, you can enable wake listening manually. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListeningButton, stopListeningButton), actionRow(defaultAssistantButton, batterySettings)),
             card("Voice & avatar", "Choose any realistic voice installed on Android. Uploaded or recorded samples stay private on this phone for a configured custom-voice engine.", voiceSpinner, useVoice, customVoiceStatus, actionRow(recordVoice, uploadVoice)),
             card("Awareness", "Each category is private, separately controlled, and handled on this phone. Sensitive context is not silently sent to the host.", awarenessStatus, awarenessControls),
             card("App permissions", "Only access required by JARVIS features is requested. The setup button advances through any missing Android grants.", permissionStatus, actionRow(request, settings), update)
-        ).forEach { section ->
+        )
+        if (BuildConfig.ADULT_MODE_AVAILABLE) sections.add(1,
+            card("18+ mode · direct edition", "For consenting adults only. An optional PIN can lock the mode; prohibited sexual content remains blocked.", adultStatus, actionRow(configureAdult, lockAdult)))
+        sections.forEach { section ->
             root.addView(section, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(14)
             })
@@ -323,6 +366,65 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         setContentView(scroll)
         refreshVoiceActivationStatus()
         refreshAwarenessStatus()
+    }
+
+    private fun adultModeStatus(): String = when {
+        !BuildConfig.ADULT_MODE_AVAILABLE -> "Unavailable in the Google Play edition."
+        !AdultModeManager.isConfigured(this) -> "Not configured"
+        AdultModeManager.isEnabled(this) -> "Enabled${if (AdultModeManager.hasPin(this)) " · PIN protected" else " · no PIN"}"
+        else -> "Locked · PIN protected"
+    }
+
+    private fun showAdultSetup(statusView: TextView) {
+        if (AdultModeManager.isConfigured(this) && AdultModeManager.hasPin(this) && !AdultModeManager.isEnabled(this)) {
+            val unlock = EditText(this).apply {
+                hint = "PIN"
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            }
+            AlertDialog.Builder(this).setTitle("Unlock 18+ mode").setView(unlock)
+                .setNegativeButton("Cancel", null).setPositiveButton("Unlock") { _, _ ->
+                    statusView.text = if (AdultModeManager.unlock(this, unlock.text.toString())) adultModeStatus() else "Incorrect PIN"
+                }.show()
+            return
+        }
+        val pin = EditText(this).apply {
+            hint = "Optional PIN (4+ characters)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Confirm 18+ access")
+            .setMessage("By continuing, you confirm that you are at least 18. Adult Mode permits consensual fictional-adult chat and images. It never permits minors, ambiguous ages, coercion, exploitation, incest, bestiality, or sexualized real-person likenesses. Leave the PIN blank only if you want this mode unsecured.")
+            .setView(pin)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("I am 18+ · enable") { _, _ ->
+                runCatching { AdultModeManager.configure(this, pin.text.toString()) }
+                    .onFailure { statusView.text = it.message ?: "Could not configure Adult Mode" }
+                    .onSuccess { statusView.text = adultModeStatus() }
+            }.show()
+    }
+
+    private fun saveAndTestCloud() {
+        val previous = SecureCloudCredentials.load(this)
+        val key = cloudApiKey.text.toString().trim().ifBlank { previous?.apiKey.orEmpty() }
+        if (key.isBlank()) { cloudStatus.text = "Enter an API key."; return }
+        val config = SecureCloudCredentials.Configuration(
+            cloudEndpoint.text.toString().trim().trimEnd('/'), key,
+            cloudChatModel.text.toString().trim(), cloudImageModel.text.toString().trim()
+        )
+        if (config.chatModel.isBlank() || config.imageModel.isBlank()) { cloudStatus.text = "Enter both model names."; return }
+        try { SecureCloudCredentials.save(this, config) }
+        catch (error: Exception) { cloudStatus.text = error.message ?: "Could not save provider"; return }
+        cloudStatus.text = "Testing direct phone connection…"
+        Thread {
+            val result = runCatching { StandaloneAiClient(this).ask("Reply with exactly: JARVIS mobile is ready") }
+            runOnUiThread {
+                cloudStatus.text = result.fold(
+                    onSuccess = { "✓ Standalone connection ready\n${it.take(120)}" },
+                    onFailure = { "Provider test failed: ${it.message ?: "connection error"}" }
+                )
+                if (result.isSuccess) cloudApiKey.text.clear()
+            }
+        }.start()
     }
 
     private fun refreshInstalledVoices() {
@@ -438,8 +540,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun enableAlwaysListening(manual: Boolean = true) {
-        if (getSharedPreferences("jarvis", MODE_PRIVATE).getString("device_id", null).isNullOrBlank()) {
-            voiceActivationStatus.text = "Pair this phone with the Windows host first."
+        if (getSharedPreferences("jarvis", MODE_PRIVATE).getString("device_id", null).isNullOrBlank() && SecureCloudCredentials.load(this) == null) {
+            voiceActivationStatus.text = "Configure Standalone AI or pair a Windows host first."
             return
         }
         val needed = mutableListOf<String>()

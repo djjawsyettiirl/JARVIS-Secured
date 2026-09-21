@@ -51,7 +51,8 @@ class BackgroundJarvisClient(private val context: Context) {
 
     fun ask(command: String): String {
         AwarenessManager.handleLocalCommand(context, command)?.let { return it }
-        val deviceId = prefs.getString("device_id", null) ?: error("Pair this phone with JARVIS first")
+        val deviceId = prefs.getString("device_id", null)
+        if (deviceId == null) return StandaloneAiClient(context).ask(command, AdultModeManager.isEnabled(context))
         var lastError: Exception? = null
         for (route in routes()) {
             try {
@@ -71,6 +72,9 @@ class BackgroundJarvisClient(private val context: Context) {
             }
         }
         DirectSerpApiSearch.search(context, command)?.let { return it }
+        SecureCloudCredentials.load(context)?.let {
+            return StandaloneAiClient(context).ask(command, AdultModeManager.isEnabled(context))
+        }
         throw lastError ?: IllegalStateException("No reachable JARVIS host")
     }
 

@@ -26,6 +26,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".MainActivity" android:exported="true" android:label="Assistant Jarvis Settings" />
+        <activity android:name=".CodingModeActivity" android:exported="false" android:label="JARVIS Coding Mode" />
         <activity android:name=".ConnectionManagerActivity" android:exported="false" android:label="Assistant Jarvis Connections" />
         <receiver android:name=".PrivateUpdateResultReceiver" android:exported="false" />
         <service

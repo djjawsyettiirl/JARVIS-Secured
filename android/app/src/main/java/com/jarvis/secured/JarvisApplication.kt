@@ -9,6 +9,7 @@ class JarvisApplication : Application(), Application.ActivityLifecycleCallbacks 
 
     override fun onCreate() {
         super.onCreate()
+        if (AdultModeManager.hasPin(this)) AdultModeManager.lock(this)
         RouteUpdateWorker.schedule(this)
         PrivateUpdateWorker.schedule(this)
         AwarenessWorker.schedule(this, AwarenessManager.enabled(this, AwarenessManager.PROACTIVE))

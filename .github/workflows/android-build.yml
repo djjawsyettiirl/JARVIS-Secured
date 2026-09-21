@@ -34,28 +34,32 @@ jobs:
         shell: pwsh
         run: |
           [IO.File]::WriteAllBytes('jarvis-release.jks', [Convert]::FromBase64String('${{ secrets.JARVIS_ANDROID_KEYSTORE_B64 }}'))
-      - name: Build signed private APK
+      - name: Test and lint Android app
+        run: gradle test lint --no-daemon --stacktrace
+      - name: Build signed APKs and Play bundle
         env:
           JARVIS_BUILD_NUMBER: ${{ github.run_number }}
           JARVIS_KEYSTORE_PATH: ${{ github.workspace }}/android/jarvis-release.jks
           JARVIS_KEYSTORE_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEYSTORE_PASSWORD }}
           JARVIS_KEY_ALIAS: ${{ secrets.JARVIS_ANDROID_KEY_ALIAS }}
           JARVIS_KEY_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEY_PASSWORD }}
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: gradle assemblePlayRelease assembleDirectRelease bundlePlayRelease --no-daemon --stacktrace
       - name: Stamp Android build identity
         shell: pwsh
         run: |
           @{
-            version = '2.0.0'
+            version = '2.1.0'
             version_code = 2000000 + [int]'${{ github.run_number }}'
             commit = '${{ github.sha }}'
             run_id = '${{ github.run_id }}'
-          } | ConvertTo-Json | Set-Content app/build/outputs/apk/release/android-build.json
-      - name: Upload APK
+          } | ConvertTo-Json | Set-Content android-build.json
+      - name: Upload Android release packages
         uses: actions/upload-artifact@v4
         with:
-          name: jarvis-android-apk
+          name: jarvis-android-release
           path: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/apk/release/android-build.json
+            android/app/build/outputs/apk/play/release/app-play-release.apk
+            android/app/build/outputs/apk/direct/release/app-direct-release.apk
+            android/app/build/outputs/bundle/playRelease/app-play-release.aab
+            android/android-build.json
           if-no-files-found: error

@@ -72,6 +72,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val handler = Handler(Looper.getMainLooper())
     @Volatile private var reconnecting = false
     @Volatile private var flushingQueue = false
+    @Volatile private var standaloneBusy = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -156,6 +157,11 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         connection = TextView(this).apply { text="Connecting…"; textSize=12.5f; setTextColor(muted); setPadding(0,dp(2),0,0) }
         brand.addView(connection)
         top.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        top.addView(Button(this).apply {
+            text="</>"; textSize=14f; isAllCaps=false; minWidth=dp(58); minHeight=dp(46); background=rounded("#151A22",18,"#252C37"); setTextColor(primary)
+            contentDescription="Open Coding Mode"
+            setOnClickListener { startActivity(Intent(this@AssistantHomeActivity, CodingModeActivity::class.java)) }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd=dp(7) })
         top.addView(Button(this).apply {
             text="⚙"; textSize=20f; isAllCaps=false; minWidth=dp(50); minHeight=dp(46); background=rounded("#151A22",18,"#252C37"); setTextColor(primary)
             setOnClickListener { startActivity(Intent(this@AssistantHomeActivity, MainActivity::class.java)) }
@@ -284,7 +290,11 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (reconnecting) return
         reconnecting=true
         val deviceId=getSharedPreferences("jarvis",MODE_PRIVATE).getString("device_id",null)
-        if(deviceId==null){connection.text="Not paired · open Settings";reconnecting=false;return}
+        if(deviceId==null){
+            connection.text=if(SecureCloudCredentials.load(this)!=null) "● Standalone cloud" else "Standalone setup needed · open Settings"
+            connection.setTextColor(Color.parseColor(if(SecureCloudCredentials.load(this)!=null) "#79AEFF" else "#D9B26F"))
+            reconnecting=false;return
+        }
         Thread {
             var last:Exception?=null
             for(route in routes()) {
@@ -319,12 +329,45 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val token=sessionToken;val route=activeRoute
         if(token==null || route==null){
             if(!targetHome) {
+                val imagePrompt = text.replace(Regex("(?i)^(generate\\s+(an?\\s+)?image(\\s+of)?|image)\\s*[:,-]?\\s*"), "").takeIf { it != text && it.isNotBlank() }
+                if (imagePrompt != null && SecureCloudCredentials.load(this) != null) { generateStandaloneImage(imagePrompt); return }
                 OfflineCapabilities.launch(this,text)?.let{addMessage("Jarvis · limited",it,system=true);return}
-                if(SecureSearchCredentials.serpApiKey(this)!=null) directSearch(text,true) else enqueue(target,text)
+                if(SecureCloudCredentials.load(this)!=null) askStandalone(text)
+                else if(SecureSearchCredentials.serpApiKey(this)!=null) directSearch(text,true)
+                else addMessage("Jarvis", "Open Settings and configure Standalone AI. Your request was not queued.", system=true)
             } else enqueue(target,text)
             return
         }
         if(targetHome)sendHome(route,token,text,true) else ask(route,token,text,true)
+    }
+
+    private fun generateStandaloneImage(prompt: String) {
+        if (standaloneBusy) { addMessage("Jarvis", "I’m still finishing the previous request.", system=true); return }
+        standaloneBusy = true; avatarState("thinking"); connection.text = "● Standalone cloud · creating image"
+        Thread {
+            val result = runCatching { StandaloneAiClient(this).generateImage(prompt, AdultModeManager.isEnabled(this)) }
+            runOnUiThread {
+                standaloneBusy = false; avatarState("idle"); connection.text = "● Standalone cloud"
+                result.onSuccess { addMessage("Jarvis · image", "Image ready:\n$it") }
+                    .onFailure { addMessage("Jarvis", "Image generation failed: ${it.message ?: "provider error"}", system=true) }
+            }
+        }.start()
+    }
+
+    private fun askStandalone(text: String) {
+        if (standaloneBusy) { addMessage("Jarvis", "I’m still finishing the previous request.", system=true); return }
+        standaloneBusy = true; avatarState("thinking"); connection.text = "● Standalone cloud · thinking"
+        Thread {
+            val result = runCatching { StandaloneAiClient(this).ask(text, AdultModeManager.isEnabled(this)) }
+            runOnUiThread {
+                standaloneBusy = false; avatarState("idle"); connection.text = "● Standalone cloud"
+                result.onSuccess { reply ->
+                    addMessage("Jarvis · mobile", reply); avatarState("speaking")
+                    tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "standalone-reply")
+                    handler.postDelayed({ avatarState("idle") }, 1200)
+                }.onFailure { addMessage("Jarvis", "Standalone request failed: ${it.message ?: "connection error"}", system=true) }
+            }
+        }.start()
     }
 
     private fun ask(route:String, token:String, text:String, queueOnFailure:Boolean) {
@@ -340,6 +383,8 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val local=OfflineCapabilities.actionFor(text)
                 if(local!=null) {
                     runOnUiThread{val confirmation=OfflineCapabilities.launch(this,text)?:local.confirmation;addMessage("Jarvis · limited",confirmation,system=true);connection.text=OfflineCapabilities.status(this)}
+                } else if(SecureCloudCredentials.load(this)!=null) {
+                    runOnUiThread { askStandalone(text) }
                 } else if(SecureSearchCredentials.serpApiKey(this)!=null) {
                     val reply=directSerpApi(text)
                     runOnUiThread{connection.text=OfflineCapabilities.status(this);if(reply!=null){showSearchTabs(text);addMessage("Jarvis · direct SerpAPI",reply);tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"direct-search-reply")}else if(queueOnFailure)enqueue("jarvis",text) else addMessage("Jarvis","Queued until reconnect",system=true)}

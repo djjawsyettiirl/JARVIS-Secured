@@ -20,7 +20,21 @@ android {
         targetSdk = 35
         val ciBuildNumber = System.getenv("JARVIS_BUILD_NUMBER")?.toIntOrNull() ?: 0
         versionCode = 2_000_000 + ciBuildNumber
-        versionName = "2.0.0"
+        versionName = "2.1.0"
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("play") {
+            dimension = "distribution"
+            buildConfigField("boolean", "ADULT_MODE_AVAILABLE", "false")
+        }
+        create("direct") {
+            dimension = "distribution"
+            applicationIdSuffix = ".direct"
+            versionNameSuffix = "-direct"
+            buildConfigField("boolean", "ADULT_MODE_AVAILABLE", "true")
+        }
     }
 
     signingConfigs {

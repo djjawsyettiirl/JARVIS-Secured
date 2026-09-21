@@ -1,0 +1,62 @@
+package com.jarvis.secured
+
+import android.content.Context
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
+class StandaloneAiClient(context: Context) {
+    private val configuration = SecureCloudCredentials.load(context)
+        ?: error("Set up a cloud AI provider in Settings")
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .callTimeout(120, TimeUnit.SECONDS)
+        .build()
+    private val json = "application/json".toMediaType()
+
+    fun ask(message: String, adultMode: Boolean = false): String {
+        val system = buildString {
+            append("You are JARVIS, a capable mobile assistant. Give accurate, direct answers. You can write and explain code in any programming language. ")
+            if (adultMode) append(AdultModeManager.systemInstruction())
+            else append("Do not generate sexually explicit or pornographic content. Keep mature discussions non-graphic and appropriate for a general-audience app store release.")
+        }
+        val payload = JSONObject()
+            .put("model", configuration.chatModel)
+            .put("messages", JSONArray()
+                .put(JSONObject().put("role", "system").put("content", system))
+                .put(JSONObject().put("role", "user").put("content", message)))
+        val response = execute("${configuration.endpoint}/chat/completions", payload)
+        return response.optJSONArray("choices")?.optJSONObject(0)
+            ?.optJSONObject("message")?.optString("content")?.trim()
+            ?.takeIf { it.isNotBlank() } ?: error("The provider returned no answer")
+    }
+
+    fun generateImage(prompt: String, adultMode: Boolean = false): String {
+        AdultModeManager.validateImagePrompt(prompt, adultMode)
+        val payload = JSONObject().put("model", configuration.imageModel)
+            .put("prompt", prompt).put("size", "1024x1024")
+        val response = execute("${configuration.endpoint}/images/generations", payload)
+        return response.optJSONArray("data")?.optJSONObject(0)?.optString("url")
+            ?.takeIf { it.startsWith("https://") } ?: error("The provider returned no image URL")
+    }
+
+    private fun execute(url: String, payload: JSONObject): JSONObject {
+        val request = Request.Builder().url(url)
+            .header("Authorization", "Bearer ${configuration.apiKey}")
+            .header("Accept", "application/json")
+            .post(payload.toString().toRequestBody(json)).build()
+        return http.newCall(request).execute().use { response ->
+            val raw = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val detail = runCatching { JSONObject(raw).optJSONObject("error")?.optString("message") }.getOrNull()
+                error(detail?.take(240) ?: "Cloud provider returned HTTP ${response.code}")
+            }
+            JSONObject(raw)
+        }
+    }
+}
