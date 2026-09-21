@@ -348,7 +348,15 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val result = runCatching { StandaloneAiClient(this).generateImage(prompt, AdultModeManager.isEnabled(this)) }
             runOnUiThread {
                 standaloneBusy = false; avatarState("idle"); connection.text = "● Standalone cloud"
-                result.onSuccess { addMessage("Jarvis · image", "Image ready:\n$it") }
+                result.onSuccess { location ->
+                    addMessage("Jarvis · image", if (location.startsWith("content://")) "Image created and opened." else "Image ready:\n$location")
+                    if (location.startsWith("content://")) runCatching {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(location)).apply {
+                            setDataAndType(Uri.parse(location), "image/png")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        })
+                    }
+                }
                     .onFailure { addMessage("Jarvis", "Image generation failed: ${it.message ?: "provider error"}", system=true) }
             }
         }.start()

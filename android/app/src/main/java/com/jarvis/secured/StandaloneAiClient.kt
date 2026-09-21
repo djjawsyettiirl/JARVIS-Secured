@@ -1,6 +1,8 @@
 package com.jarvis.secured
 
 import android.content.Context
+import android.util.Base64
+import androidx.core.content.FileProvider
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -8,8 +10,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.io.File
 
-class StandaloneAiClient(context: Context) {
+class StandaloneAiClient(private val context: Context) {
     private val configuration = SecureCloudCredentials.load(context)
         ?: error("Set up a cloud AI provider in Settings")
     private val http = OkHttpClient.Builder()
@@ -41,8 +44,14 @@ class StandaloneAiClient(context: Context) {
         val payload = JSONObject().put("model", configuration.imageModel)
             .put("prompt", prompt).put("size", "1024x1024")
         val response = execute("${configuration.endpoint}/images/generations", payload)
-        return response.optJSONArray("data")?.optJSONObject(0)?.optString("url")
-            ?.takeIf { it.startsWith("https://") } ?: error("The provider returned no image URL")
+        val image = response.optJSONArray("data")?.optJSONObject(0) ?: error("The provider returned no image")
+        image.optString("url").takeIf { it.startsWith("https://") }?.let { return it }
+        val encoded = image.optString("b64_json").takeIf { it.isNotBlank() }
+            ?: error("The provider returned an unsupported image response")
+        val directory = File(context.cacheDir, "generated-images").apply { mkdirs() }
+        val file = File(directory, "jarvis-${System.currentTimeMillis()}.png")
+        file.writeBytes(Base64.decode(encoded, Base64.DEFAULT))
+        return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file).toString()
     }
 
     private fun execute(url: String, payload: JSONObject): JSONObject {

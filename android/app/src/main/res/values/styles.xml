@@ -4,7 +4,6 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:statusBarColor">#070B12</item>
         <item name="android:navigationBarColor">#070B12</item>
-        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowSoftInputMode">adjustResize</item>
         <item name="android:windowSplashScreenBackground">#07030A</item>
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
