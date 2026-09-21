@@ -48,7 +48,7 @@ jobs:
         shell: pwsh
         run: |
           @{
-            version = '2.1.0'
+            version = '2.1.1'
             version_code = 2000000 + [int]'${{ github.run_number }}'
             commit = '${{ github.sha }}'
             run_id = '${{ github.run_id }}'
