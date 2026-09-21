@@ -24,8 +24,8 @@ class CodingModeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val pad = (16 * resources.displayMetrics.density).toInt()
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(pad,pad,pad,pad); setBackgroundColor(Color.rgb(7,11,18)) }
-        root.addView(TextView(this).apply { text="JARVIS Coding Mode"; textSize=26f; setTextColor(Color.WHITE })
-        root.addView(TextView(this).apply { text="Runs directly from this phone. Generated code is never executed automatically."; textSize=13f; setTextColor(Color.LTGRAY })
+        root.addView(TextView(this).apply { text="JARVIS Coding Mode"; textSize=26f; setTextColor(Color.WHITE) })
+        root.addView(TextView(this).apply { text="Runs directly from this phone. Generated code is never executed automatically."; textSize=13f; setTextColor(Color.LTGRAY) })
         language = Spinner(this).apply {
             adapter = ArrayAdapter(this@CodingModeActivity, android.R.layout.simple_spinner_dropdown_item,
                 listOf("Auto detect","Python","JavaScript","TypeScript","Kotlin","Java","C","C++","C#","Go","Rust","Swift","PHP","Ruby","SQL","HTML/CSS","Shell","PowerShell","R","Dart","Lua"))
