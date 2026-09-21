@@ -92,6 +92,11 @@ class OfflineWakeWordEngine(
 
     @Synchronized
     private fun startCapture() {
+        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requested = false
+            onFailure("Microphone permission was revoked")
+            return
+        }
         val readyModel = model ?: return
         val minimum = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
