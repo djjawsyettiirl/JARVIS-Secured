@@ -333,7 +333,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         root.addView(title)
         root.addView(subtitle)
-        val sections = mutableListOf(
+        val sections = mutableListOf<View>(
             card("Standalone AI", "Runs directly from this phone without Windows. Credentials are encrypted by Android Keystore and sent only to the HTTPS provider you choose.", cloudStatus, cloudEndpoint, cloudApiKey, cloudChatModel, cloudImageModel, actionRow(saveCloud, clearCloud)),
             card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
             card("Voice activation", "Automatic when JARVIS is your default assistant. Otherwise, you can enable wake listening manually. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListeningButton, stopListeningButton), actionRow(defaultAssistantButton, batterySettings)),
