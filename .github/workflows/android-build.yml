@@ -47,8 +47,9 @@ jobs:
       - name: Stamp Android build identity
         shell: pwsh
         run: |
+          $releaseVersion = (Get-Content ../VERSION -Raw).Trim()
           @{
-            version = '2.1.1'
+            version = $releaseVersion
             version_code = 2000000 + [int]'${{ github.run_number }}'
             commit = '${{ github.sha }}'
             run_id = '${{ github.run_id }}'
