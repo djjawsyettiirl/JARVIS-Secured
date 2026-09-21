@@ -2,6 +2,7 @@ name: Windows host build
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches: [main, v0.1-secure-pairing, v2.0.0]
 
@@ -27,7 +28,8 @@ jobs:
       - name: Stamp private build identity
         shell: pwsh
         run: |
-          @{ version = '2.0.0'; commit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content host/build-info.json
+          $releaseVersion = (Get-Content VERSION -Raw).Trim()
+          @{ version = $releaseVersion; commit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content host/build-info.json
       - name: Bundle Windows speech engine
         shell: pwsh
         run: |
@@ -52,8 +54,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item dist/JARVIS.exe package/JARVIS.exe
           Copy-Item dist/JARVIS-Updater.exe package/JARVIS-Updater.exe
-          @'
-          JARVIS for Windows v2.0.0
+          $releaseVersion = (Get-Content VERSION -Raw).Trim()
+          (@'
+          JARVIS for Windows v{{VERSION}}
 
           Run JARVIS.exe. It opens as a standalone Windows desktop application.
           The secure host, dashboard, and Cloudflare tunnel run inside the app.
@@ -64,7 +67,7 @@ jobs:
           signed background route handoffs so a changed Quick Tunnel URL can be
           recovered without a paid domain. Do not expose the local admin dashboard
           (8766) publicly.
-          '@ | Set-Content package/README.txt
+          '@).Replace('{{VERSION}}', $releaseVersion) | Set-Content package/README.txt
           Compress-Archive -Path package/* -DestinationPath JARVIS-Windows-Host.zip -Force
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
