@@ -259,6 +259,25 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val ask = styleButton(Button(this).apply { text = "Ask JARVIS"; setOnClickListener { askJarvis() } })
         val speak = styleButton(Button(this).apply { text = "🎙 Speak"; setOnClickListener { startVoiceInput() } }, true)
         val update = styleButton(Button(this).apply { text = "Check private update"; setOnClickListener { installPrivateUpdate(false) } })
+        val exportSettings = styleButton(Button(this).apply {
+            text = "Export settings"
+            setOnClickListener {
+                startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = JarvisMigration.MIME_TYPE
+                    putExtra(Intent.EXTRA_TITLE, JarvisMigration.DEFAULT_FILE_NAME)
+                }, SETTINGS_EXPORT_REQUEST)
+            }
+        }, true)
+        val importSettings = styleButton(Button(this).apply {
+            text = "Import settings"
+            setOnClickListener {
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = JarvisMigration.MIME_TYPE
+                }, SETTINGS_IMPORT_REQUEST)
+            }
+        }, true)
         val cloud = SecureCloudCredentials.load(this)
         cloudEndpoint = styleInput(EditText(this).apply {
             hint = "OpenAI-compatible HTTPS endpoint"
@@ -339,7 +358,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             card("Voice activation", "Automatic when JARVIS is your default assistant. Otherwise, you can enable wake listening manually. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListeningButton, stopListeningButton), actionRow(defaultAssistantButton, batterySettings)),
             card("Voice & avatar", "Choose any realistic voice installed on Android. Uploaded or recorded samples stay private on this phone for a configured custom-voice engine.", voiceSpinner, useVoice, customVoiceStatus, actionRow(recordVoice, uploadVoice)),
             card("Awareness", "Each category is private, separately controlled, and handled on this phone. Sensitive context is not silently sent to the host.", awarenessStatus, awarenessControls),
-            card("App permissions", "Only access required by JARVIS features is requested. The setup button advances through any missing Android grants.", permissionStatus, actionRow(request, settings), update)
+            card("App permissions & transfer", "Export safe settings before moving between JARVIS editions. Device identity, pairing secrets, API keys, PIN data, and messages are never exported.", permissionStatus, actionRow(request, settings), actionRow(exportSettings, importSettings), update)
         )
         AdultModeFeature.createSettingsView(this)?.let { sections.add(1, it) }
         sections.forEach { section ->
@@ -1067,6 +1086,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             refreshVoiceActivationStatus()
         }
         if (requestCode == VOICE_SAMPLE_REQUEST && resultCode == RESULT_OK) data?.data?.let { saveVoiceSample(it) }
+        if (requestCode == SETTINGS_EXPORT_REQUEST && resultCode == RESULT_OK) data?.data?.let { uri ->
+            runCatching { JarvisMigration.exportTo(this, uri) }
+                .onSuccess { assistantReply.text = "Settings exported. Pairing keys and private credentials were intentionally excluded." }
+                .onFailure { assistantReply.text = "Settings export failed: ${it.message ?: "unknown error"}" }
+        }
+        if (requestCode == SETTINGS_IMPORT_REQUEST && resultCode == RESULT_OK) data?.data?.let { uri ->
+            runCatching { JarvisMigration.importFrom(this, uri) }
+                .onSuccess {
+                    assistantReply.text = "Imported ${it.imported} settings. Restarting JARVIS; pair this installation once and re-enter provider credentials."
+                    recreate()
+                }
+                .onFailure { assistantReply.text = "Settings import failed: ${it.message ?: "unknown error"}" }
+        }
     }
 
     override fun onInit(status: Int) {
@@ -1095,5 +1127,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val VOICE_REQUEST = 1002
         private const val ASSISTANT_ROLE_REQUEST = 1003
         private const val VOICE_SAMPLE_REQUEST = 1004
+        private const val SETTINGS_EXPORT_REQUEST = 1005
+        private const val SETTINGS_IMPORT_REQUEST = 1006
     }
 }
