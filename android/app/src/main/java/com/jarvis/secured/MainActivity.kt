@@ -35,7 +35,6 @@ import android.widget.Switch
 import android.widget.Spinner
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -219,7 +218,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     AwarenessManager.setEnabled(this@MainActivity, key, checked)
                     if (checked && key == AwarenessManager.SCREEN) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     if (checked && key == AwarenessManager.LOCATION && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-                        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), PERMISSION_REQUEST)
+                        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), PERMISSION_REQUEST)
                     if (checked && key == AwarenessManager.PERSONAL && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED)
                         requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), PERMISSION_REQUEST)
                     refreshAwarenessStatus()
@@ -332,19 +331,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         renderInbox()
 
-        val adultStatus = TextView(this).apply {
-            textSize = 14f; setTextColor(textMuted)
-            text = adultModeStatus()
-        }
-        val configureAdult = styleButton(Button(this).apply {
-            text = "Set up 18+ mode"
-            setOnClickListener { showAdultSetup(adultStatus) }
-        })
-        val lockAdult = styleButton(Button(this).apply {
-            text = "Lock 18+ mode"
-            setOnClickListener { AdultModeManager.lock(this@MainActivity); adultStatus.text = adultModeStatus() }
-        }, true)
-
         root.addView(title)
         root.addView(subtitle)
         val sections = mutableListOf(
@@ -355,8 +341,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             card("Awareness", "Each category is private, separately controlled, and handled on this phone. Sensitive context is not silently sent to the host.", awarenessStatus, awarenessControls),
             card("App permissions", "Only access required by JARVIS features is requested. The setup button advances through any missing Android grants.", permissionStatus, actionRow(request, settings), update)
         )
-        if (BuildConfig.ADULT_MODE_AVAILABLE) sections.add(1,
-            card("18+ mode · direct edition", "For consenting adults only. An optional PIN can lock the mode; prohibited sexual content remains blocked.", adultStatus, actionRow(configureAdult, lockAdult)))
+        AdultModeFeature.createSettingsView(this)?.let { sections.add(1, it) }
         sections.forEach { section ->
             root.addView(section, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(14)
@@ -366,41 +351,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         setContentView(scroll)
         refreshVoiceActivationStatus()
         refreshAwarenessStatus()
-    }
-
-    private fun adultModeStatus(): String = when {
-        !BuildConfig.ADULT_MODE_AVAILABLE -> "Unavailable in the Google Play edition."
-        !AdultModeManager.isConfigured(this) -> "Not configured"
-        AdultModeManager.isEnabled(this) -> "Enabled${if (AdultModeManager.hasPin(this)) " · PIN protected" else " · no PIN"}"
-        else -> "Locked · PIN protected"
-    }
-
-    private fun showAdultSetup(statusView: TextView) {
-        if (AdultModeManager.isConfigured(this) && AdultModeManager.hasPin(this) && !AdultModeManager.isEnabled(this)) {
-            val unlock = EditText(this).apply {
-                hint = "PIN"
-                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            }
-            AlertDialog.Builder(this).setTitle("Unlock 18+ mode").setView(unlock)
-                .setNegativeButton("Cancel", null).setPositiveButton("Unlock") { _, _ ->
-                    statusView.text = if (AdultModeManager.unlock(this, unlock.text.toString())) adultModeStatus() else "Incorrect PIN"
-                }.show()
-            return
-        }
-        val pin = EditText(this).apply {
-            hint = "Optional PIN (4+ characters)"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Confirm 18+ access")
-            .setMessage("By continuing, you confirm that you are at least 18. Adult Mode permits consensual fictional-adult chat and images. It never permits minors, ambiguous ages, coercion, exploitation, incest, bestiality, or sexualized real-person likenesses. Leave the PIN blank only if you want this mode unsecured.")
-            .setView(pin)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("I am 18+ · enable") { _, _ ->
-                runCatching { AdultModeManager.configure(this, pin.text.toString()) }
-                    .onFailure { statusView.text = it.message ?: "Could not configure Adult Mode" }
-                    .onSuccess { statusView.text = adultModeStatus() }
-            }.show()
     }
 
     private fun saveAndTestCloud() {
@@ -890,7 +840,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun shareCurrentLocation(baseUrl: String, token: String, prefix: String) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), PERMISSION_REQUEST)
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), PERMISSION_REQUEST)
             assistantReply.text = "Grant location permission, then ask me to share your location again."
             return
         }
