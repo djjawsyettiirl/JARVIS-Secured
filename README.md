@@ -2,9 +2,9 @@
 
 JARVIS is a private, multi-device assistant with a Windows home host and a paired Android companion. Windows manages device trust, internet search, messaging, and private updates. Android retains limited local abilities when the host is unavailable.
 
-> Current private release: **2.0.0**
+> Current private release: **2.2.0**
 >
-> Active development branch: **`v0.1-secure-pairing`**
+> Active release branch: **`main`**
 
 ## What works today
 
