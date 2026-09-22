@@ -298,6 +298,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val clearCloud = styleButton(Button(this).apply { text = "Remove cloud credentials"; setOnClickListener {
             SecureCloudCredentials.clear(this@MainActivity); cloudApiKey.text.clear(); cloudStatus.text = "Standalone cloud AI is not configured."
         } }, true)
+        val localModelsStatus = TextView(this).apply {
+            text = LocalModelStore.status(this@MainActivity)
+            textSize = 14f
+            setTextColor(textMuted)
+        }
+        val manageLocalModels = styleButton(Button(this).apply {
+            text = "Manage local model packs"
+            setOnClickListener { startActivity(Intent(this@MainActivity, LocalModelsActivity::class.java)) }
+        })
         voiceSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Loading installed voices…"))
         }
@@ -353,7 +362,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         root.addView(title)
         root.addView(subtitle)
         val sections = mutableListOf<View>(
-            card("Standalone AI", "Runs directly from this phone without Windows. Credentials are encrypted by Android Keystore and sent only to the HTTPS provider you choose.", cloudStatus, cloudEndpoint, cloudApiKey, cloudChatModel, cloudImageModel, actionRow(saveCloud, clearCloud)),
+            card("On-device AI", "Verified local models run without Windows, an API key, or internet access. Local models are preferred automatically for chat, Coding Mode, and image generation.", localModelsStatus, manageLocalModels),
+            card("Cloud AI fallback", "Used only when the corresponding local model is not installed. Credentials are encrypted by Android Keystore and sent only to the HTTPS provider you choose.", cloudStatus, cloudEndpoint, cloudApiKey, cloudChatModel, cloudImageModel, actionRow(saveCloud, clearCloud)),
             card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
             card("Voice activation", "Automatic when JARVIS is your default assistant. Otherwise, you can enable wake listening manually. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListeningButton, stopListeningButton), actionRow(defaultAssistantButton, batterySettings)),
             card("Voice & avatar", "Choose any realistic voice installed on Android. Uploaded or recorded samples stay private on this phone for a configured custom-voice engine.", voiceSpinner, useVoice, customVoiceStatus, actionRow(recordVoice, uploadVoice)),
