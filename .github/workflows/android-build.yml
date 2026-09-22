@@ -64,3 +64,15 @@ jobs:
             android/app/build/outputs/bundle/playRelease/app-play-release.aab
             android/android-build.json
           if-no-files-found: error
+      - name: Prepare Windows companion update
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path companion-update | Out-Null
+          Copy-Item app/build/outputs/apk/direct/release/app-direct-release.apk companion-update/app-release.apk
+          Copy-Item android-build.json companion-update/android-build.json
+      - name: Upload Windows companion update
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-android-apk
+          path: android/companion-update/*
+          if-no-files-found: error
