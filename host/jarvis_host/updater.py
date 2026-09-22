@@ -262,7 +262,13 @@ class Updater:
             shutil.copy2(replacement_companion, companion)
         digest = hashlib.sha256(replacement.read_bytes()).hexdigest()
         subprocess.Popen(
-            [str(companion), "--current", str(Path(sys.executable)), "--replacement", str(replacement), "--sha256", digest],
+            [
+                str(companion),
+                "--current", str(Path(sys.executable)),
+                "--replacement", str(replacement),
+                "--sha256", digest,
+                "--archive-dir", str(self.old_development_dir),
+            ],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

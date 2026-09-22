@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from windows_process import hidden_process_kwargs
@@ -19,7 +20,22 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def apply_update(current: Path, replacement: Path, expected_sha256: str) -> None:
+def _archive_current_package(current: Path, archive_root: Path) -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    destination = archive_root / f"windows-host-{stamp}"
+    suffix = 1
+    while destination.exists():
+        destination = archive_root / f"windows-host-{stamp}-{suffix}"
+        suffix += 1
+    destination.mkdir(parents=True)
+    for name in ("JARVIS.exe", "JARVIS-Updater.exe", "README.txt"):
+        source = current.with_name(name)
+        if source.is_file():
+            shutil.copy2(source, destination / name)
+    return destination
+
+
+def apply_update(current: Path, replacement: Path, expected_sha256: str, archive_root: Path | None = None) -> None:
     current = current.resolve()
     replacement = replacement.resolve()
     if current.name.lower() != "jarvis.exe" or replacement.name.lower() != "jarvis.exe":
@@ -37,6 +53,8 @@ def apply_update(current: Path, replacement: Path, expected_sha256: str) -> None
         **hidden_process_kwargs(),
     )
     time.sleep(1)
+    if archive_root is not None:
+        _archive_current_package(current, archive_root.resolve())
     incoming = current.with_name("JARVIS.new.exe")
     for _ in range(120):
         try:
@@ -58,8 +76,9 @@ def main() -> None:
     parser.add_argument("--current", required=True, type=Path)
     parser.add_argument("--replacement", required=True, type=Path)
     parser.add_argument("--sha256", required=True)
+    parser.add_argument("--archive-dir", type=Path)
     args = parser.parse_args()
-    apply_update(args.current, args.replacement, args.sha256)
+    apply_update(args.current, args.replacement, args.sha256, args.archive_dir)
 
 
 if __name__ == "__main__":
