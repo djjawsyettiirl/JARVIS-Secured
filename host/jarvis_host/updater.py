@@ -177,7 +177,23 @@ class Updater:
         pending = self.update_dir / "android-next"
         shutil.rmtree(pending, ignore_errors=True)
         pending.mkdir(parents=True)
-        self._run("run", "download", str(run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-android-apk", "-D", str(pending))
+        try:
+            self._run("run", "download", str(run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-android-apk", "-D", str(pending))
+        except RuntimeError as primary_error:
+            # V2.2 builds created before the companion artifact was introduced
+            # still contain the Direct APK in the full Android release bundle.
+            shutil.rmtree(pending, ignore_errors=True)
+            pending.mkdir(parents=True)
+            try:
+                self._run("run", "download", str(run["databaseId"]), "--repo", REPOSITORY, "-n", "jarvis-android-release", "-D", str(pending))
+            except RuntimeError:
+                raise primary_error
+            direct_apk = next(pending.rglob("app-direct-release.apk"), None)
+            build_identity = next(pending.rglob("android-build.json"), None)
+            if direct_apk:
+                shutil.copy2(direct_apk, pending / "app-release.apk")
+            if build_identity and build_identity != pending / "android-build.json":
+                shutil.copy2(build_identity, pending / "android-build.json")
         if not (pending / "app-release.apk").is_file():
             raise FileNotFoundError("The latest Android build did not contain app-release.apk")
         build_file = pending / "android-build.json"
@@ -211,12 +227,12 @@ class Updater:
             if self.android_run:
                 try:
                     self._stage_android_run(self.android_run)
-                except RuntimeError as exc:
+                except Exception as exc:
                     # A host upgrading to a new product version cannot validate
                     # that version's Android APK until the new Windows host is
                     # running. Do not block the Windows restart; startup will
                     # stage the matching Android artifact immediately afterward.
-                    if not windows_staged or "expected" not in str(exc):
+                    if not windows_staged:
                         raise
             self.status = "ready"
         except Exception as exc:
