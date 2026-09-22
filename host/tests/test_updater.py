@@ -161,6 +161,54 @@ def test_android_artifact_identity_must_match_selected_commit(monkeypatch, tmp_p
         updater._stage_android_run({"databaseId": 10, "headSha": "new"})
 
 
+
+def test_android_update_falls_back_to_full_release_artifact(monkeypatch, tmp_path):
+    updater = Updater()
+    monkeypatch.setattr(type(updater), "update_dir", property(lambda self: tmp_path))
+    calls = []
+
+    def download(*args):
+        calls.append(args)
+        pending = tmp_path / "android-next"
+        if "jarvis-android-apk" in args:
+            raise RuntimeError("no artifact matches any of the names or patterns provided")
+        nested = pending / "app" / "build" / "outputs" / "apk" / "direct" / "release"
+        nested.mkdir(parents=True)
+        (nested / "app-direct-release.apk").write_bytes(b"apk")
+        (pending / "android-build.json").write_text(
+            json.dumps({"version": updater_module.VERSION, "version_code": 2000001, "commit": "new"}),
+            encoding="utf-8",
+        )
+        return ""
+
+    monkeypatch.setattr(updater, "_run", download)
+    updater._stage_android_run({"databaseId": 10, "headSha": "new"})
+
+    assert any("jarvis-android-apk" in call for call in calls)
+    assert any("jarvis-android-release" in call for call in calls)
+    assert (tmp_path / "android" / "app-release.apk").read_bytes() == b"apk"
+
+
+def test_missing_android_artifact_does_not_block_windows_update(monkeypatch, tmp_path):
+    updater = Updater()
+    monkeypatch.setattr(type(updater), "update_dir", property(lambda self: tmp_path))
+    monkeypatch.setattr(type(updater), "old_development_dir", property(lambda self: tmp_path / "old"))
+    monkeypatch.setattr(updater, "_latest", lambda workflow: {"databaseId": 10, "headSha": "new"})
+
+    def download(*args):
+        if "jarvis-windows-host" in args:
+            pending = tmp_path / "windows-next"
+            (pending / "JARVIS-Windows-Host.zip").write_bytes(b"windows")
+            return ""
+        raise RuntimeError("no artifact matches any of the names or patterns provided")
+
+    monkeypatch.setattr(updater, "_run", download)
+    updater._download()
+
+    assert updater.status == "ready"
+    assert (tmp_path / "windows" / "JARVIS-Windows-Host.zip").is_file()
+
+
 def test_new_windows_version_is_ready_even_when_old_host_rejects_android(monkeypatch, tmp_path):
     updater = Updater()
     monkeypatch.setattr(type(updater), "update_dir", property(lambda self: tmp_path))
