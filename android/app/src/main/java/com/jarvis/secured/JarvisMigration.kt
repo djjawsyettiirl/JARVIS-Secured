@@ -12,7 +12,7 @@ import org.json.JSONObject
  */
 object JarvisMigration {
     const val MIME_TYPE = "application/json"
-    const val DEFAULT_FILE_NAME = "JARVIS-settings-v2.1.1.jarvis-transfer.json"
+    const val DEFAULT_FILE_NAME = "JARVIS-settings-v2.2.0.jarvis-transfer.json"
 
     private val portableKeys = setOf(
         "host", "active_host", "lan_host", "remote_host",

@@ -76,4 +76,6 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.5")
     implementation("net.java.dev.jna:jna:5.18.1@aar")
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
+    implementation("com.google.mediapipe:tasks-genai:0.10.35")
+    implementation("com.google.mediapipe:tasks-vision-image-generator:0.10.26.1")
 }
