@@ -95,6 +95,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var inboxMessages: TextView
     private lateinit var voiceSpinner: Spinner
     private lateinit var customVoiceStatus: TextView
+    private lateinit var cloudEndpoint: EditText
+    private lateinit var cloudApiKey: EditText
+    private lateinit var cloudChatModel: EditText
+    private lateinit var cloudImageModel: EditText
+    private lateinit var cloudStatus: TextView
     private var recorder: MediaRecorder? = null
     private var recordingFile: File? = null
     private var recording = false
@@ -213,7 +218,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     AwarenessManager.setEnabled(this@MainActivity, key, checked)
                     if (checked && key == AwarenessManager.SCREEN) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     if (checked && key == AwarenessManager.LOCATION && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-                        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), PERMISSION_REQUEST)
+                        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), PERMISSION_REQUEST)
                     if (checked && key == AwarenessManager.PERSONAL && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED)
                         requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), PERMISSION_REQUEST)
                     refreshAwarenessStatus()
@@ -254,6 +259,45 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val ask = styleButton(Button(this).apply { text = "Ask JARVIS"; setOnClickListener { askJarvis() } })
         val speak = styleButton(Button(this).apply { text = "🎙 Speak"; setOnClickListener { startVoiceInput() } }, true)
         val update = styleButton(Button(this).apply { text = "Check private update"; setOnClickListener { installPrivateUpdate(false) } })
+        val exportSettings = styleButton(Button(this).apply {
+            text = "Export settings"
+            setOnClickListener {
+                startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = JarvisMigration.MIME_TYPE
+                    putExtra(Intent.EXTRA_TITLE, JarvisMigration.DEFAULT_FILE_NAME)
+                }, SETTINGS_EXPORT_REQUEST)
+            }
+        }, true)
+        val importSettings = styleButton(Button(this).apply {
+            text = "Import settings"
+            setOnClickListener {
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = JarvisMigration.MIME_TYPE
+                }, SETTINGS_IMPORT_REQUEST)
+            }
+        }, true)
+        val cloud = SecureCloudCredentials.load(this)
+        cloudEndpoint = styleInput(EditText(this).apply {
+            hint = "OpenAI-compatible HTTPS endpoint"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setText(cloud?.endpoint ?: "https://api.openai.com/v1")
+        })
+        cloudApiKey = styleInput(EditText(this).apply {
+            hint = if (cloud == null) "Provider API key" else "API key saved — leave blank to keep it"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        })
+        cloudChatModel = styleInput(EditText(this).apply { hint = "Chat model"; setText(cloud?.chatModel ?: "gpt-4.1-mini") })
+        cloudImageModel = styleInput(EditText(this).apply { hint = "Image model"; setText(cloud?.imageModel ?: "gpt-image-1") })
+        cloudStatus = TextView(this).apply {
+            text = if (cloud == null) "Standalone cloud AI is not configured." else "Standalone cloud AI is configured."
+            textSize = 14f; setTextColor(textMuted)
+        }
+        val saveCloud = styleButton(Button(this).apply { text = "Save & test standalone AI"; setOnClickListener { saveAndTestCloud() } })
+        val clearCloud = styleButton(Button(this).apply { text = "Remove cloud credentials"; setOnClickListener {
+            SecureCloudCredentials.clear(this@MainActivity); cloudApiKey.text.clear(); cloudStatus.text = "Standalone cloud AI is not configured."
+        } }, true)
         voiceSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Loading installed voices…"))
         }
@@ -308,13 +352,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         root.addView(title)
         root.addView(subtitle)
-        listOf(
+        val sections = mutableListOf<View>(
+            card("Standalone AI", "Runs directly from this phone without Windows. Credentials are encrypted by Android Keystore and sent only to the HTTPS provider you choose.", cloudStatus, cloudEndpoint, cloudApiKey, cloudChatModel, cloudImageModel, actionRow(saveCloud, clearCloud)),
             card("Connection", "Pair once, then JARVIS reconnects automatically.", status, host, code, pair, spokenName, saveSpokenName, scopesStatus),
             card("Voice activation", "Automatic when JARVIS is your default assistant. Otherwise, you can enable wake listening manually. Say “Jarvis” followed by a command.", voiceActivationStatus, actionRow(enableListeningButton, stopListeningButton), actionRow(defaultAssistantButton, batterySettings)),
             card("Voice & avatar", "Choose any realistic voice installed on Android. Uploaded or recorded samples stay private on this phone for a configured custom-voice engine.", voiceSpinner, useVoice, customVoiceStatus, actionRow(recordVoice, uploadVoice)),
             card("Awareness", "Each category is private, separately controlled, and handled on this phone. Sensitive context is not silently sent to the host.", awarenessStatus, awarenessControls),
-            card("App permissions", "Only access required by JARVIS features is requested. The setup button advances through any missing Android grants.", permissionStatus, actionRow(request, settings), update)
-        ).forEach { section ->
+            card("App permissions & transfer", "Export safe settings before moving between JARVIS editions. Device identity, pairing secrets, API keys, PIN data, and messages are never exported.", permissionStatus, actionRow(request, settings), actionRow(exportSettings, importSettings), update)
+        )
+        AdultModeFeature.createSettingsView(this)?.let { sections.add(1, it) }
+        sections.forEach { section ->
             root.addView(section, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(14)
             })
@@ -323,6 +370,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         setContentView(scroll)
         refreshVoiceActivationStatus()
         refreshAwarenessStatus()
+    }
+
+    private fun saveAndTestCloud() {
+        val previous = SecureCloudCredentials.load(this)
+        val key = cloudApiKey.text.toString().trim().ifBlank { previous?.apiKey.orEmpty() }
+        if (key.isBlank()) { cloudStatus.text = "Enter an API key."; return }
+        val config = SecureCloudCredentials.Configuration(
+            cloudEndpoint.text.toString().trim().trimEnd('/'), key,
+            cloudChatModel.text.toString().trim(), cloudImageModel.text.toString().trim()
+        )
+        if (config.chatModel.isBlank() || config.imageModel.isBlank()) { cloudStatus.text = "Enter both model names."; return }
+        try { SecureCloudCredentials.save(this, config) }
+        catch (error: Exception) { cloudStatus.text = error.message ?: "Could not save provider"; return }
+        cloudStatus.text = "Testing direct phone connection…"
+        Thread {
+            val result = runCatching { StandaloneAiClient(this).ask("Reply with exactly: JARVIS mobile is ready") }
+            runOnUiThread {
+                cloudStatus.text = result.fold(
+                    onSuccess = { "✓ Standalone connection ready\n${it.take(120)}" },
+                    onFailure = { "Provider test failed: ${it.message ?: "connection error"}" }
+                )
+                if (result.isSuccess) cloudApiKey.text.clear()
+            }
+        }.start()
     }
 
     private fun refreshInstalledVoices() {
@@ -438,8 +509,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun enableAlwaysListening(manual: Boolean = true) {
-        if (getSharedPreferences("jarvis", MODE_PRIVATE).getString("device_id", null).isNullOrBlank()) {
-            voiceActivationStatus.text = "Pair this phone with the Windows host first."
+        if (getSharedPreferences("jarvis", MODE_PRIVATE).getString("device_id", null).isNullOrBlank() && SecureCloudCredentials.load(this) == null) {
+            voiceActivationStatus.text = "Configure Standalone AI or pair a Windows host first."
             return
         }
         val needed = mutableListOf<String>()
@@ -788,7 +859,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun shareCurrentLocation(baseUrl: String, token: String, prefix: String) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), PERMISSION_REQUEST)
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), PERMISSION_REQUEST)
             assistantReply.text = "Grant location permission, then ask me to share your location again."
             return
         }
@@ -1015,6 +1086,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             refreshVoiceActivationStatus()
         }
         if (requestCode == VOICE_SAMPLE_REQUEST && resultCode == RESULT_OK) data?.data?.let { saveVoiceSample(it) }
+        if (requestCode == SETTINGS_EXPORT_REQUEST && resultCode == RESULT_OK) data?.data?.let { uri ->
+            runCatching { JarvisMigration.exportTo(this, uri) }
+                .onSuccess { assistantReply.text = "Settings exported. Pairing keys and private credentials were intentionally excluded." }
+                .onFailure { assistantReply.text = "Settings export failed: ${it.message ?: "unknown error"}" }
+        }
+        if (requestCode == SETTINGS_IMPORT_REQUEST && resultCode == RESULT_OK) data?.data?.let { uri ->
+            runCatching { JarvisMigration.importFrom(this, uri) }
+                .onSuccess {
+                    assistantReply.text = "Imported ${it.imported} settings. Restarting JARVIS; pair this installation once and re-enter provider credentials."
+                    recreate()
+                }
+                .onFailure { assistantReply.text = "Settings import failed: ${it.message ?: "unknown error"}" }
+        }
     }
 
     override fun onInit(status: Int) {
@@ -1043,5 +1127,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val VOICE_REQUEST = 1002
         private const val ASSISTANT_ROLE_REQUEST = 1003
         private const val VOICE_SAMPLE_REQUEST = 1004
+        private const val SETTINGS_EXPORT_REQUEST = 1005
+        private const val SETTINGS_IMPORT_REQUEST = 1006
     }
 }
