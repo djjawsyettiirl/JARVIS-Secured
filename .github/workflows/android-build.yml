@@ -35,15 +35,15 @@ jobs:
         run: |
           [IO.File]::WriteAllBytes('jarvis-release.jks', [Convert]::FromBase64String('${{ secrets.JARVIS_ANDROID_KEYSTORE_B64 }}'))
       - name: Test and lint Android app
-        run: gradle test lint --no-daemon --stacktrace
-      - name: Build signed APKs and Play bundle
+        run: gradle testPublicBetaDirectReleaseUnitTest lintPublicBetaDirectRelease --no-daemon --stacktrace
+      - name: Build signed public beta Direct APK
         env:
           JARVIS_BUILD_NUMBER: ${{ github.run_number }}
           JARVIS_KEYSTORE_PATH: ${{ github.workspace }}/android/jarvis-release.jks
           JARVIS_KEYSTORE_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEYSTORE_PASSWORD }}
           JARVIS_KEY_ALIAS: ${{ secrets.JARVIS_ANDROID_KEY_ALIAS }}
           JARVIS_KEY_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEY_PASSWORD }}
-        run: gradle assembleDirectRelease --no-daemon --stacktrace
+        run: gradle assemblePublicBetaDirectRelease --no-daemon --stacktrace
       - name: Stamp Android build identity
         shell: pwsh
         run: |
@@ -51,6 +51,9 @@ jobs:
           @{
             version = $releaseVersion
             version_code = 2000000 + [int]'${{ github.run_number }}'
+            edition = 'public_beta'
+            distribution = 'direct'
+            package = 'com.jarvis.secured.beta.direct'
             commit = '${{ github.sha }}'
             run_id = '${{ github.run_id }}'
           } | ConvertTo-Json | Set-Content android-build.json
@@ -59,14 +62,14 @@ jobs:
         with:
           name: jarvis-android-release
           path: |
-            android/app/build/outputs/apk/direct/release/app-direct-release.apk
+            android/app/build/outputs/apk/publicBetaDirect/release/app-publicBeta-direct-release.apk
             android/android-build.json
           if-no-files-found: error
       - name: Prepare Windows companion update
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path companion-update | Out-Null
-          Copy-Item app/build/outputs/apk/direct/release/app-direct-release.apk companion-update/app-release.apk
+          Copy-Item app/build/outputs/apk/publicBetaDirect/release/app-publicBeta-direct-release.apk companion-update/app-release.apk
           Copy-Item android-build.json companion-update/android-build.json
       - name: Upload Windows companion update
         uses: actions/upload-artifact@v4
