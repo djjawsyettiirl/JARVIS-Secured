@@ -6,13 +6,8 @@ plugins {
 android {
     namespace = "com.jarvis.secured"
     compileSdk = 35
-    buildFeatures {
-        buildConfig = true
-    }
-
-    androidResources {
-        noCompress += "glb"
-    }
+    buildFeatures { buildConfig = true }
+    androidResources { noCompress += "glb" }
 
     defaultConfig {
         applicationId = "com.jarvis.secured"
@@ -23,8 +18,20 @@ android {
         versionName = rootProject.file("../VERSION").readText().trim()
     }
 
-    flavorDimensions += "distribution"
+    flavorDimensions += listOf("edition", "distribution")
     productFlavors {
+        create("developer") {
+            dimension = "edition"
+            buildConfigField("String", "JARVIS_EDITION", "\"developer\"")
+            buildConfigField("boolean", "PUBLIC_INTEGRITY_ENFORCED", "false")
+        }
+        create("publicBeta") {
+            dimension = "edition"
+            applicationIdSuffix = ".beta"
+            versionNameSuffix = "-public"
+            buildConfigField("String", "JARVIS_EDITION", "\"public_beta\"")
+            buildConfigField("boolean", "PUBLIC_INTEGRITY_ENFORCED", "true")
+        }
         create("play") {
             dimension = "distribution"
             buildConfigField("boolean", "ADULT_MODE_AVAILABLE", "false")
@@ -60,10 +67,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    kotlinOptions { jvmTarget = "17" }
 }
 
 dependencies {
