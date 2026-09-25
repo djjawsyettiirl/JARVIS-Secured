@@ -16,6 +16,9 @@ jobs:
           python-version: '3.12'
       - name: Install host dependencies
         run: python -m pip install --upgrade pip && pip install -r host/requirements.txt pyinstaller
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
       - name: Run host tests
         working-directory: host
         run: python -m pytest tests -q
@@ -48,6 +51,47 @@ jobs:
           if ($process.ExitCode -ne 0) { throw "Packaged JARVIS smoke test failed with exit code $($process.ExitCode)" }
           $updater = Start-Process -FilePath 'dist/JARVIS-Updater.exe' -ArgumentList '--help' -PassThru -Wait -WindowStyle Hidden
           if ($updater.ExitCode -ne 0) { throw "Packaged updater smoke test failed with exit code $($updater.ExitCode)" }
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $releaseVersion = (Get-Content VERSION -Raw).Trim()
+          @'
+          [Setup]
+          AppId={{B2BDB6B8-AD90-4D38-BD8A-4B8BB10D2211}}
+          AppName=JARVIS Secured
+          AppVersion={{VERSION}}
+          AppPublisher=JARVIS Secured
+          DefaultDirName={autopf}\\JARVIS Secured
+          DefaultGroupName=JARVIS Secured
+          OutputDir=installer-output
+          OutputBaseFilename=JARVIS-2.2.1-Beta-Windows-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          SetupIconFile=host\\assets\\jarvis.ico
+          UninstallDisplayIcon={app}\\JARVIS.exe
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+
+          [Files]
+          Source: "dist\\JARVIS.exe"; DestDir: "{app}"; Flags: ignoreversion
+          Source: "dist\\JARVIS-Updater.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+          [Icons]
+          Name: "{autoprograms}\\JARVIS Secured"; Filename: "{app}\\JARVIS.exe"
+          Name: "{autodesktop}\\JARVIS Secured"; Filename: "{app}\\JARVIS.exe"; Tasks: desktopicon
+
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
+
+          [Run]
+          Filename: "{app}\\JARVIS.exe"; Description: "Launch JARVIS Secured"; Flags: nowait postinstall skipifsilent
+          '@.Replace('{{VERSION}}', $releaseVersion) | Set-Content installer.iss
+          & "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe" installer.iss
+      - name: Verify Windows installer
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'installer-output/JARVIS-2.2.1-Beta-Windows-Setup.exe')) { throw 'Windows installer was not produced' }
       - name: Prepare package
         shell: pwsh
         run: |
@@ -73,5 +117,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jarvis-windows-host
-          path: JARVIS-Windows-Host.zip
+          path: |
+            JARVIS-Windows-Host.zip
+            installer-output/JARVIS-2.2.1-Beta-Windows-Setup.exe
           if-no-files-found: error
