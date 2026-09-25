@@ -79,6 +79,8 @@ Windows hosts Coding Mode so Android can request project changes without compili
 
 Windows and Android builds share the repository `VERSION` and build identity. Mismatched packages are rejected by the update path.
 
+For the public beta, official updates use an owner-controlled trust chain: embedded verification key → signed release manifest → artifact SHA-256 verification → platform signing identity → anti-rollback/version checks. Release signing credentials are never stored in the repository or distributed application. See [SECURITY.md](SECURITY.md).
+
 ## Current limitations
 
 - This is beta software and has not yet been packaged as a mainstream consumer installer/store release.
@@ -103,4 +105,4 @@ Anything intentionally paused should live under [`temporary-development/`](tempo
 
 Beta testers: please include your platform, JARVIS version, what you expected, what happened, and reproduction steps when reporting a problem.
 
-JARVIS 2.2.1 Beta is under active development.
+JARVIS 2.2.1 Beta is under active development. Public builds are intended to start clean: developer accounts, credentials, pairing state, messages, private memory, local uploads, and other personal runtime data are not part of the distributed package.
