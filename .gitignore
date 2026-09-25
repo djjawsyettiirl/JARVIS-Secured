@@ -28,3 +28,26 @@ JARVIS-Windows-Host.zip
 *.iml
 .DS_Store
 Thumbs.db
+
+# Local/private JARVIS state — never commit
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+credentials.json
+token.json
+secrets.json
+**/user-data/
+**/private-data/
+**/voice-samples/
+**/uploads/
+**/updates/
+**/Old Development/
+**/JARVIS Projects/
