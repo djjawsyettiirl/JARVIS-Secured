@@ -21,6 +21,8 @@ if __name__ == "__main__" and _smoke_requested():
 
 import uvicorn
 import webview
+import pystray
+from PIL import Image
 
 from jarvis_host.app import app, store
 from jarvis_host.admin import admin_app
@@ -32,6 +34,10 @@ from jarvis_host import assistant_ui
 from jarvis_host.google_account import data_dir
 from jarvis_host.version import VERSION
 from jarvis_host.single_instance import acquire as acquire_single_instance
+
+_exit_requested = threading.Event()
+_tray_icon = None
+_main_window = None
 
 app.include_router(route_rendezvous.router)
 admin_app.include_router(assistant_ui.router)
@@ -95,7 +101,69 @@ def _show_main_window(window) -> None:
         _startup_log("main window show failed\n" + traceback.format_exc())
 
 
+
+def _tray_image() -> Image.Image:
+    icon_path = Path(__file__).resolve().parent / "assets" / "jarvis.ico"
+    if getattr(sys, "frozen", False):
+        icon_path = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "assets" / "jarvis.ico"
+    try:
+        return Image.open(icon_path)
+    except Exception:
+        return Image.new("RGB", (64, 64), "black")
+
+
+def _open_from_tray(icon=None, item=None) -> None:
+    if _main_window is not None:
+        try:
+            _main_window.show()
+            _main_window.load_url("http://127.0.0.1:8766/assistant-v1")
+        except Exception:
+            _startup_log("tray open failed\n" + traceback.format_exc())
+
+
+def _open_settings_from_tray(icon=None, item=None) -> None:
+    _open_from_tray()
+    if _main_window is not None:
+        try:
+            _main_window.evaluate_js("toggleSettings()")
+        except Exception:
+            pass
+
+
+def _exit_from_tray(icon=None, item=None) -> None:
+    _exit_requested.set()
+    try:
+        if icon is not None:
+            icon.stop()
+    finally:
+        if _main_window is not None:
+            try:
+                _main_window.destroy()
+            except Exception:
+                pass
+
+
+def _start_tray() -> None:
+    global _tray_icon
+    menu = pystray.Menu(
+        pystray.MenuItem("Open JARVIS", _open_from_tray, default=True),
+        pystray.MenuItem("Settings", _open_settings_from_tray),
+        pystray.MenuItem("Exit JARVIS", _exit_from_tray),
+    )
+    _tray_icon = pystray.Icon("jarvis-secured", _tray_image(), "JARVIS Secured", menu)
+    _tray_icon.run()
+
+
+def _window_closed() -> bool:
+    # Closing the desktop window leaves the host/services alive in the tray.
+    # Explicit Exit JARVIS is the only normal shutdown path.
+    if not _exit_requested.is_set():
+        threading.Timer(0.2, _open_from_tray).start()
+        return False
+    return True
+
 def main() -> None:
+    global _main_window
     if _smoke_requested():
         from jarvis_host.windows_voice import windows_voice
         windows_voice.validate()
@@ -133,6 +201,12 @@ def main() -> None:
         background_color="#02060b",
         text_select=True,
     )
+    _main_window = window
+    try:
+        window.events.closing += _window_closed
+    except Exception:
+        _startup_log("window close interception unavailable")
+    threading.Thread(target=_start_tray, daemon=True).start()
     _startup_log("main window created")
     try:
         webview.start(_show_main_window, (window,), gui="edgechromium", private_mode=True)
@@ -141,6 +215,11 @@ def main() -> None:
         _startup_log("webview loop failed\n" + traceback.format_exc())
         raise
     finally:
+        if _tray_icon is not None:
+            try:
+                _tray_icon.stop()
+            except Exception:
+                pass
         tunnel.stop_tunnel()
         admin_server.should_exit = True
         gateway_server.should_exit = True
