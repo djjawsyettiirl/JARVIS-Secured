@@ -4,6 +4,8 @@ This directory is the single home for JARVIS work that is intentionally paused a
 
 ## Currently shelved
 
+All paused development belongs here as one centralized temporary-development area. Active 2.2.1 Beta runtime code remains in its normal platform directories; paused concepts, packaging tracks, and future-only work are documented or stored here.
+
 ### Google Play distribution
 
 Google Play publishing is temporarily shelved while the project focuses on direct beta distribution and a dependable Windows installer.
