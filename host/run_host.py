@@ -3,6 +3,7 @@ import sys
 import threading
 import time
 import traceback
+from pathlib import Path
 from datetime import datetime, timezone
 
 
@@ -155,10 +156,14 @@ def _start_tray() -> None:
 
 
 def _window_closed() -> bool:
-    # Closing the desktop window leaves the host/services alive in the tray.
+    # Closing the desktop window hides it while the host/services stay alive.
     # Explicit Exit JARVIS is the only normal shutdown path.
     if not _exit_requested.is_set():
-        threading.Timer(0.2, _open_from_tray).start()
+        try:
+            if _main_window is not None:
+                _main_window.hide()
+        except Exception:
+            pass
         return False
     return True
 
