@@ -1,130 +1,106 @@
-# JARVIS Secured
+# JARVIS Secured — 2.2.1 Beta
 
-JARVIS is a private, multi-device assistant with a Windows home host and a paired Android companion. Windows manages device trust, internet search, messaging, and private updates. Android retains limited local abilities when the host is unavailable.
+JARVIS is a multi-device AI assistant built around a Windows host and a securely paired Android companion.
 
-> Current private release: **2.2.0**
+> **Current public beta: 2.2.1-beta**
 >
-> Active release branch: **`main`**
+> **Beta software:** expect bugs. Please report reproducible issues through GitHub Issues.
+
+## Download / beta testing
+
+The goal of 2.2.1 Beta is to make testing straightforward for people who do not want to build JARVIS from source.
+
+- **Windows:** a proper installer is being prepared from the packaged Windows binary.
+- **Android direct beta:** a signed APK is the direct-download testing build.
+- **Google Play distribution:** temporarily shelved; Play-specific development is kept under `temporary-development/` until resumed.
+- Use only packages produced by this repository's signed build workflows.
+
+When public GitHub Release assets are published, use the **Releases** page rather than downloading source-code archives.
 
 ## What works today
 
 ### Windows and Android
 
-- A shared Ask JARVIS interface with voice input and spoken replies.
-- Locally rendered live 3D avatars with idle, listening, thinking, and speaking states (David Martinez on Windows; Crimson Silk Empress on Android).
-- Picture attachments from the Windows file picker or Android gallery.
-- Installed voice selection plus private custom voice-sample recording/upload controls.
-- Branded launch screens instead of an empty black startup window.
-- Web, Images, and Videos search tabs with short, clickable results.
-- Private SearXNG search with an optional SerpAPI fallback.
-- Private messaging between Windows and paired Android devices.
-- Signed, matched Windows and Android automatic updates.
-- Custom JARVIS branding on both platforms.
-- Permission-gated Coding Mode for proposing multi-language project changes, previewing diffs, and applying only approved edits.
+- Shared Ask JARVIS interface with voice input and spoken replies.
+- Locally rendered live 3D avatars with idle, listening, thinking, and speaking states.
+- Picture attachments.
+- Installed voice selection and private custom voice-sample controls.
+- Branded launch screens.
+- Web, Images, and Videos search.
+- Private SearXNG search with optional SerpAPI fallback.
+- Private messaging between paired devices.
+- Matched Windows and Android update system.
+- Permission-gated Coding Mode with diff preview and explicit approval before writes.
 
 ### Android
 
-- Keyboard-safe chat layout that keeps the composer visible while typing.
+- Keyboard-safe chat layout.
 - One-time secure pairing with automatic reconnection.
-- Persistent offline “Jarvis” wake-phrase detection through a visible foreground service.
-- Android default-assistant role support for configured gestures and buttons.
-- Microphone-session ownership tracking: JARVIS yields while another app records and resumes after release.
-- Android speech recognition runs only for the short command after the local wake word, eliminating continuous recognizer restart loops.
-- Limited mode with direct SerpAPI search, Maps, email composition, and Calendar actions when Windows is unreachable.
-- Seven separately controlled awareness categories: device, location, personal context, screen context, home devices, private memory, and proactive alerts.
-- Encrypted storage of the transferred SerpAPI key using Android Keystore.
+- Offline “Jarvis” wake-phrase detection through a foreground service.
+- Android default-assistant role support.
+- Microphone-session ownership tracking.
+- Limited mode for selected actions when Windows is unreachable.
+- Separately controlled awareness categories.
+- Android Keystore protection for transferred credentials.
 
 ### Security and privacy
 
-- One-time pairing codes expire after five minutes and cannot be reused.
-- Each Android device creates its own ECDSA P-256 key pair; its private key never leaves the phone.
-- Paired devices authenticate with signed challenges and short-lived sessions.
+- Pairing codes are single-use and expire after five minutes.
+- Android devices create their own ECDSA P-256 key pair; private keys remain on-device.
+- Signed challenges and short-lived sessions authenticate paired devices.
 - Devices can be revoked or permanently forgotten from Windows.
 - Sensitive awareness data stays on Android by default.
-- Screen context is opt-in through an explicitly enabled accessibility service.
-- Unneeded camera, contacts, call-log, SMS, and storage permissions are not requested.
-- Coding projects are confined to the configured JARVIS workspace; paired devices need the separate `coding` capability, and applying a preview also requires `files_write`.
+- Screen context is opt-in.
+- Coding projects are confined to the configured JARVIS workspace.
+
+## Quick start
+
+### Windows
+
+Install the 2.2.1 Beta Windows package when it appears under GitHub Releases, launch JARVIS, then open **Settings** for pairing, search, permissions, and updates.
+
+Developers can use [host/README.md](host/README.md).
+
+### Android direct beta
+
+Install the matching signed direct APK from the same 2.2.1 Beta release. In Windows JARVIS, generate a pairing code, then enter the host address and eight-digit code on Android.
+
+See [android/README.md](android/README.md) for development and LAN testing.
+
+## Internet search
+
+JARVIS supports private SearXNG and an optional SerpAPI fallback. Configure these under **Settings → Internet search** on Windows.
 
 ## Coding Mode
 
-Windows hosts Coding Mode so Android can request changes without compiling on the phone. Set `JARVIS_CODING_API_KEY` and optionally `JARVIS_CODING_API_URL`, `JARVIS_CODING_MODEL`, and `JARVIS_CODING_WORKSPACE` on the Windows host. The default workspace is `JARVIS Projects` in the Windows user's home folder.
-
-Coding Mode sends a bounded set of UTF-8 project files to the configured OpenAI-compatible coding model. It supports any text-based language the selected model understands. Generated binaries, secrets, `.git` contents, dependency folders, and paths outside the workspace are excluded. Every proposal returns a diff and an expiring change ID; no file is written until the user approves that exact change. Devices require `coding` to request previews and both `coding` and `files_write` to apply them.
-
-## Getting started
-
-### 1. Start the Windows host
-
-Use the latest packaged Windows build. JARVIS opens its assistant window while the secure host and updater remain in the background. Open **Settings** to manage pairing, search, devices, permissions, and updates.
-
-For development setup, see [host/README.md](host/README.md).
-
-### 2. Configure internet search
-
-Open **Settings → Internet search** in Windows JARVIS.
-
-- **SearXNG:** Enter the complete URL of your private instance, then choose **Save and test SearXNG**.
-- **SerpAPI:** Enter your key and choose **Save and test SerpAPI**. JARVIS uses it as a fallback when SearXNG is unavailable.
-
-With the `offline_search` device capability enabled, Windows securely transfers the SerpAPI key to Android. The encrypted Android copy supports direct searches when the host cannot be reached.
-
-Useful links: [SearXNG documentation](https://docs.searxng.org/) · [SerpAPI dashboard](https://serpapi.com/manage-api-key)
-
-### 3. Pair Android
-
-1. In Windows JARVIS, open **Settings → Pair a device** and generate a code.
-2. Install the matching signed Android APK offered by the Windows host.
-3. On Android, enter the host address and eight-digit code.
-4. Approve only the JARVIS capabilities that device should receive.
-
-The code is single-use and expires after five minutes. Restarting either app does not require pairing again. See [android/README.md](android/README.md) for development and LAN testing.
-
-### 4. Configure voice activation
-
-Open **Android JARVIS → Settings → Voice activation**.
-
-- Choose **Set as default assistant** to use Android’s configured assistant gesture or button. Wake listening is managed automatically while JARVIS holds that role.
-- Otherwise, choose **Enable always listening** to start the optional wake listener. Its permanent notification identifies microphone use and provides a Stop action.
-- A battery-optimization exemption is optional but can help on phones that aggressively stop background services.
-
-Android normally labels microphone access **Allow only while using the app**. For a foreground microphone service and default assistant, this is the supported permission path; Android does not provide JARVIS a separate unrestricted “always allow microphone” grant. JARVIS pauses its listener whenever another recording session takes priority.
+Windows hosts Coding Mode so Android can request project changes without compiling on the phone. Proposals return a diff and expiring change ID; no file is written until the exact change is approved.
 
 ## Updates
 
-The Windows host checks the private release workflow every five minutes. It downloads a newer verified package in the background, closes cleanly, applies it without a console flash, and reopens. A signed Android APK is staged only when its version and source commit match the Windows build.
-
-Android checks its paired host for that APK and displays Android’s protected installer confirmation. Older and mismatched APKs are rejected.
-
-## Architecture
-
-```text
-Android companion
-  ├─ device-bound private key
-  ├─ encrypted offline SerpAPI key (optional)
-  └─ local limited-mode actions
-            │ signed authentication / HTTPS
-            ▼
-Windows home host
-  ├─ device and permission control
-  ├─ SearXNG / SerpAPI search
-  ├─ messaging and remote routing
-  └─ matched Windows + Android updater
-```
-
-The packaged host can create a Cloudflare Quick Tunnel for remote access. Every remote connection remains untrusted; the tunnel does not replace device authentication. See [docs/architecture.md](docs/architecture.md), [docs/online.md](docs/online.md), and [docs/permissions.md](docs/permissions.md).
+Windows and Android builds share the repository `VERSION` and build identity. Mismatched packages are rejected by the update path.
 
 ## Current limitations
 
-- Wake-phrase recognition runs locally with the bundled offline model; command transcription still depends on Android’s installed speech-recognition service.
-- Android always-listening mode must remain visible through its foreground-service notification.
-- Gmail and Calendar support opens secure Android intents; JARVIS does not read private email or calendar databases.
+- This is beta software and has not yet been packaged as a mainstream consumer installer/store release.
+- Wake-phrase recognition is local, while command transcription depends on Android's installed speech-recognition service.
+- Android always-listening mode remains visible through its foreground-service notification.
 - Host-dependent messaging and integrations wait or queue while Windows is unreachable.
+- Google Play publishing is temporarily shelved while direct beta distribution is prioritized.
+
+## Temporarily shelved development
+
+Anything intentionally paused should live under [`temporary-development/`](temporary-development/) rather than being scattered through active release paths. See its README for the current shelved-development inventory.
 
 ## Repository layout
 
-- `host/` — Windows host, assistant UI, updater, search, messaging, and tests.
-- `android/` — Android companion, secure pairing, limited mode, awareness, and voice activation.
-- `docs/` — protocol architecture, remote access, and permission design.
-- `.github/workflows/` — signed Android and packaged Windows builds.
+- `host/` — active Windows host and desktop application.
+- `android/` — active Android direct-beta companion.
+- `docs/` — active protocol, architecture, remote-access, and permission documentation.
+- `temporary-development/` — paused/shelved development kept together until resumed.
+- `.github/workflows/` — build and validation automation.
 
-This repository is under active private development. Install only artifacts produced by its configured signed workflows.
+## Feedback
+
+Beta testers: please include your platform, JARVIS version, what you expected, what happened, and reproduction steps when reporting a problem.
+
+JARVIS 2.2.1 Beta is under active development.
