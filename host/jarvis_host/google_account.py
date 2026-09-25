@@ -12,7 +12,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
 ]
-KEYRING_SERVICE = "JARVIS-Secured"
+EDITION = os.environ.get("JARVIS_EDITION", "developer").strip().lower()\nIS_PUBLIC_BETA = EDITION == "public_beta"\nKEYRING_SERVICE = "JARVIS-Secured-Beta" if IS_PUBLIC_BETA else "JARVIS-Secured"
 KEYRING_USER = "google-oauth-token"
 
 
@@ -21,8 +21,8 @@ def data_dir() -> Path:
     if configured:
         return Path(configured)
     if os.name == "nt":
-        return Path(os.environ.get("LOCALAPPDATA", Path.home())) / "JARVIS"
-    return Path.home() / ".jarvis"
+        return Path(os.environ.get("LOCALAPPDATA", Path.home())) / ("JARVIS-Secured-Beta" if IS_PUBLIC_BETA else "JARVIS")
+    return Path.home() / (".jarvis-beta" if IS_PUBLIC_BETA else ".jarvis")
 
 
 class GoogleAccount:
