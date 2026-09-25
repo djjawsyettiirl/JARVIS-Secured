@@ -40,14 +40,14 @@ jobs:
           Expand-Archive -LiteralPath 'system.speech.zip' -DestinationPath 'system-speech-package'
           Copy-Item 'system-speech-package/lib/netstandard2.0/System.Speech.dll' 'host/System.Speech.dll'
       - name: Build Windows host executable
-        run: pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS --icon host/assets/jarvis.ico --paths host --collect-all uvicorn --collect-all fastapi --collect-all cryptography --hidden-import cryptography.hazmat.bindings._rust --collect-all googleapiclient --collect-all google_auth_oauthlib --collect-all keyring --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr --add-binary "host/cloudflared.exe;." --add-binary "host/System.Speech.dll;." --add-data "host/build-info.json;." --add-data "host/assets/avatar;assets/avatar" host/run_host.py
+        run: $env:JARVIS_EDITION = "public_beta"\n          pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS-Beta --icon host/assets/jarvis.ico --paths host --collect-all uvicorn --collect-all fastapi --collect-all cryptography --hidden-import cryptography.hazmat.bindings._rust --collect-all googleapiclient --collect-all google_auth_oauthlib --collect-all keyring --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr --add-binary "host/cloudflared.exe;." --add-binary "host/System.Speech.dll;." --add-data "host/build-info.json;." --add-data "host/assets/avatar;assets/avatar" host/run_host.py
       - name: Build companion updater
         run: pyinstaller --noconfirm --clean --onefile --windowed --name JARVIS-Updater --icon host/assets/jarvis.ico host/run_updater.py
       - name: Smoke test packaged executable
         shell: pwsh
         run: |
           $env:JARVIS_SMOKE_TEST = '1'
-          $process = Start-Process -FilePath 'dist/JARVIS.exe' -ArgumentList '--smoke-test' -PassThru -Wait -WindowStyle Hidden
+          $process = Start-Process -FilePath 'dist/JARVIS-Beta.exe' -ArgumentList '--smoke-test' -PassThru -Wait -WindowStyle Hidden
           if ($process.ExitCode -ne 0) { throw "Packaged JARVIS smoke test failed with exit code $($process.ExitCode)" }
           $updater = Start-Process -FilePath 'dist/JARVIS-Updater.exe' -ArgumentList '--help' -PassThru -Wait -WindowStyle Hidden
           if ($updater.ExitCode -ne 0) { throw "Packaged updater smoke test failed with exit code $($updater.ExitCode)" }
@@ -57,35 +57,35 @@ jobs:
           $releaseVersion = (Get-Content VERSION -Raw).Trim()
           @'
           [Setup]
-          AppId={{B2BDB6B8-AD90-4D38-BD8A-4B8BB10D2211}}
-          AppName=JARVIS Secured
+          AppId={{9A81B3C7-64DF-4B62-9C7B-221B2A211221}}
+          AppName=JARVIS Secured Beta
           AppVersion={{VERSION}}
           AppPublisher=JARVIS Secured
-          DefaultDirName={autopf}\\JARVIS Secured
-          DefaultGroupName=JARVIS Secured
+          DefaultDirName={autopf}\\JARVIS Secured Beta
+          DefaultGroupName=JARVIS Secured Beta
           OutputDir=installer-output
           OutputBaseFilename=JARVIS-2.2.1-Beta-Windows-Setup
           Compression=lzma2
           SolidCompression=yes
           WizardStyle=modern
           SetupIconFile=host\\assets\\jarvis.ico
-          UninstallDisplayIcon={app}\\JARVIS.exe
+          UninstallDisplayIcon={app}\\JARVIS-Beta.exe
           ArchitecturesAllowed=x64compatible
           ArchitecturesInstallIn64BitMode=x64compatible
 
           [Files]
-          Source: "dist\\JARVIS.exe"; DestDir: "{app}"; Flags: ignoreversion
+          Source: "dist\\JARVIS-Beta.exe"; DestDir: "{app}"; Flags: ignoreversion
           Source: "dist\\JARVIS-Updater.exe"; DestDir: "{app}"; Flags: ignoreversion
 
           [Icons]
-          Name: "{autoprograms}\\JARVIS Secured"; Filename: "{app}\\JARVIS.exe"
-          Name: "{autodesktop}\\JARVIS Secured"; Filename: "{app}\\JARVIS.exe"; Tasks: desktopicon
+          Name: "{autoprograms}\\JARVIS Secured Beta"; Filename: "{app}\\JARVIS-Beta.exe"
+          Name: "{autodesktop}\\JARVIS Secured Beta"; Filename: "{app}\\JARVIS-Beta.exe"; Tasks: desktopicon
 
           [Tasks]
           Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
           [Run]
-          Filename: "{app}\\JARVIS.exe"; Description: "Launch JARVIS Secured"; Flags: nowait postinstall skipifsilent
+          Filename: "{app}\\JARVIS-Beta.exe"; Description: "Launch JARVIS Secured"; Flags: nowait postinstall skipifsilent
           '@.Replace('{{VERSION}}', $releaseVersion) | Set-Content installer.iss
           & "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe" installer.iss
       - name: Verify Windows installer
@@ -96,13 +96,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
-          Copy-Item dist/JARVIS.exe package/JARVIS.exe
+          Copy-Item dist/JARVIS-Beta.exe package/JARVIS-Beta.exe
           Copy-Item dist/JARVIS-Updater.exe package/JARVIS-Updater.exe
           $releaseVersion = (Get-Content VERSION -Raw).Trim()
           (@'
           JARVIS for Windows v{{VERSION}}
 
-          Run JARVIS.exe. It opens as a standalone Windows desktop application.
+          Run JARVIS-Beta.exe. It opens as a standalone Windows desktop application.
           The secure host, dashboard, and Cloudflare tunnel run inside the app.
           No console or external browser window is required.
 
