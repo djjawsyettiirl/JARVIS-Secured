@@ -226,6 +226,21 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (::avatarView.isInitialized) avatarView.evaluateJavascript("window.setJarvisEmotion(${JSONObject.quote(emotion)})", null)
     }
 
+    private fun animateAvatarFor(emotion: String) {
+        if (!::avatarView.isInitialized) return
+        val candidates = when (emotion) {
+            "happy" -> listOf("happy", "smile", "wave", "idle")
+            "excited" -> listOf("excited", "celebrate", "dance", "wave")
+            "playful" -> listOf("playful", "dance", "wave", "idle")
+            "concerned", "sad" -> listOf("sad", "concerned", "idle")
+            "annoyed" -> listOf("annoyed", "angry", "idle")
+            "calm" -> listOf("calm", "idle")
+            else -> listOf("idle")
+        }
+        val script = candidates.joinToString("||") { "window.jarvisPlayAnimation&&window.jarvisPlayAnimation(${JSONObject.quote(it)})" }
+        avatarView.evaluateJavascript(script, null)
+    }
+
     private fun emotionFor(text: String): String {
         val value = text.lowercase(Locale.US)
         return when {
@@ -386,7 +401,7 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             runOnUiThread {
                 standaloneBusy = false; avatarState("idle"); connection.text = "● Standalone cloud"
                 result.onSuccess { reply ->
-                    addMessage("Jarvis · mobile", reply); avatarEmotion(emotionFor(reply)); avatarState("speaking")
+                    addMessage("Jarvis · mobile", reply); val emotion=emotionFor(reply); avatarEmotion(emotion); animateAvatarFor(emotion); avatarState("speaking")
                     tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "standalone-reply")
                     handler.postDelayed({ avatarState("idle"); avatarEmotion("neutral") }, 1200)
                 }.onFailure { addMessage("Jarvis", "Standalone request failed: ${it.message ?: "connection error"}", system=true) }
