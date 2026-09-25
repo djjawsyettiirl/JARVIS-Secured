@@ -43,7 +43,7 @@ jobs:
           JARVIS_KEYSTORE_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEYSTORE_PASSWORD }}
           JARVIS_KEY_ALIAS: ${{ secrets.JARVIS_ANDROID_KEY_ALIAS }}
           JARVIS_KEY_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEY_PASSWORD }}
-        run: gradle assemblePlayRelease assembleDirectRelease bundlePlayRelease --no-daemon --stacktrace
+        run: gradle assembleDirectRelease --no-daemon --stacktrace
       - name: Stamp Android build identity
         shell: pwsh
         run: |
@@ -59,9 +59,7 @@ jobs:
         with:
           name: jarvis-android-release
           path: |
-            android/app/build/outputs/apk/play/release/app-play-release.apk
             android/app/build/outputs/apk/direct/release/app-direct-release.apk
-            android/app/build/outputs/bundle/playRelease/app-play-release.aab
             android/android-build.json
           if-no-files-found: error
       - name: Prepare Windows companion update
