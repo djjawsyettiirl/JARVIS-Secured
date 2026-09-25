@@ -222,6 +222,22 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (::avatarView.isInitialized) avatarView.evaluateJavascript("window.setJarvisState(${JSONObject.quote(state)})", null)
     }
 
+    private fun avatarEmotion(emotion: String) {
+        if (::avatarView.isInitialized) avatarView.evaluateJavascript("window.setJarvisEmotion(${JSONObject.quote(emotion)})", null)
+    }
+
+    private fun emotionFor(text: String): String {
+        val value = text.lowercase(Locale.US)
+        return when {
+            listOf("haha", "lol", "funny", "joke", "😂", "🤣").any { value.contains(it) } -> "playful"
+            listOf("great", "awesome", "love", "happy", "glad", "nice").any { value.contains(it) } -> "happy"
+            listOf("excited", "amazing", "hell yeah", "let's go").any { value.contains(it) } -> "excited"
+            listOf("sorry", "sad", "hurt", "miss", "depressed", "upset").any { value.contains(it) } -> "concerned"
+            listOf("angry", "annoyed", "pissed", "damn", "fuck").any { value.contains(it) } -> "annoyed"
+            else -> "neutral"
+        }
+    }
+
     private fun uploadImage(uri: Uri) {
         val token=sessionToken; val route=activeRoute
         if(token==null || route==null){addMessage("JARVIS", "Reconnect before attaching a picture.", system=true);return}
@@ -370,9 +386,9 @@ class AssistantHomeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             runOnUiThread {
                 standaloneBusy = false; avatarState("idle"); connection.text = "● Standalone cloud"
                 result.onSuccess { reply ->
-                    addMessage("Jarvis · mobile", reply); avatarState("speaking")
+                    addMessage("Jarvis · mobile", reply); avatarEmotion(emotionFor(reply)); avatarState("speaking")
                     tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "standalone-reply")
-                    handler.postDelayed({ avatarState("idle") }, 1200)
+                    handler.postDelayed({ avatarState("idle"); avatarEmotion("neutral") }, 1200)
                 }.onFailure { addMessage("Jarvis", "Standalone request failed: ${it.message ?: "connection error"}", system=true) }
             }
         }.start()
