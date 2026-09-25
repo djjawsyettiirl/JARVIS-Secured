@@ -12,7 +12,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
 ]
-EDITION = os.environ.get("JARVIS_EDITION", "developer").strip().lower()\nIS_PUBLIC_BETA = EDITION == "public_beta"\nKEYRING_SERVICE = "JARVIS-Secured-Beta" if IS_PUBLIC_BETA else "JARVIS-Secured"
+EDITION = os.environ.get("JARVIS_EDITION", "developer").strip().lower()
+IS_PUBLIC_BETA = EDITION == "public_beta"
+KEYRING_SERVICE = "JARVIS-Secured-Beta" if IS_PUBLIC_BETA else "JARVIS-Secured"
 KEYRING_USER = "google-oauth-token"
 
 
