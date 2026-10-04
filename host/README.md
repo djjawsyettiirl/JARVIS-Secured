@@ -1,5 +1,15 @@
 # Windows host
 
+## Install the public Windows beta
+
+1. Download the **Windows Setup** executable from the [JARVIS GitHub Releases page](https://github.com/djjawsyettiirl/JARVIS-Secured/releases).
+2. Run the installer and follow the setup prompts. Choose whether to add a desktop shortcut.
+3. Launch **Assistant Jarvis** from Start.
+4. If Windows Firewall asks, allow JARVIS on your **Private** network so your phone can pair.
+5. Open **Settings → Pairing** and create a one-time code when connecting Android.
+
+The portable host ZIP is available for users who prefer to extract and launch it manually. See the [Windows and Android install guide](../docs/install.md) for Android setup.
+
 ## Run
 
 From the repository root:
