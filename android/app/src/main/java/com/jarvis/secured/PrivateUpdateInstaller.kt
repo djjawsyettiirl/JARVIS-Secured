@@ -8,6 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import java.security.MessageDigest
 import androidx.core.app.NotificationCompat
 import java.io.File
 
@@ -22,7 +25,44 @@ object PrivateUpdateInstaller {
         return if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
     }
 
+    fun verifyPackageAndSigningIdentity(context: Context, apk: File) {
+        val packageManager = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= 28) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+        val candidate = packageManager.getPackageArchiveInfo(apk.absolutePath, flags)
+            ?: throw SecurityException("The downloaded APK is invalid")
+        if (candidate.packageName != context.packageName) {
+            throw SecurityException("The downloaded APK is for a different JARVIS edition")
+        }
+        @Suppress("DEPRECATION")
+        val installed = packageManager.getPackageInfo(context.packageName, flags)
+        val candidateSigners = signerFingerprints(candidate)
+        val installedSigners = signerFingerprints(installed)
+        if (candidateSigners.isEmpty() || candidateSigners != installedSigners) {
+            throw SecurityException("The update was not signed by the installed JARVIS publisher")
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun signerFingerprints(info: PackageInfo): Set<String> {
+        val signatures = if (Build.VERSION.SDK_INT >= 28) {
+            info.signingInfo?.apkContentsSigners
+        } else {
+            info.signatures
+        } ?: return emptySet()
+        return signatures.map { signature ->
+            MessageDigest.getInstance("SHA-256")
+                .digest(signature.toByteArray())
+                .joinToString("") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
+        }.toSet()
+    }
+
     fun install(context: Context, apk: File) {
+        verifyPackageAndSigningIdentity(context, apk)
         val candidate = versionCode(context, apk.absolutePath) ?: error("The downloaded APK is invalid")
         val installed = versionCode(context) ?: 0L
         if (candidate <= installed) return
