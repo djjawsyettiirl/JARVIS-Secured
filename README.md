@@ -1,19 +1,19 @@
-# JARVIS Secured — 2.2.1 Beta
+# JARVIS Secured — 2.2.2 Beta
 
 JARVIS is a multi-device AI assistant built around a Windows host and a securely paired Android companion.
 
-> **Beta build: 2.2.1-beta**
+> **Candidate version: 2.2.2-beta**
 >
-> The Windows installer and signed Android Direct APK will be posted on GitHub Releases after the Windows, Android, and version checks pass for the same commit.
+> The Windows installer and signed Android Direct APK for 2.2.2-beta will be posted after automated checks and the documented device and install gates pass on the same commit.
 >
 > **Beta software:** expect bugs. Please report reproducible issues through GitHub Issues.
 
 ## Download / beta testing
 
-The goal of 2.2.1 Beta is to make testing straightforward for people who do not want to build JARVIS from source.
+The goal of 2.2.2 Beta is to make testing straightforward for people who do not want to build JARVIS from source.
 
-- **Windows:** the Windows build produces a setup installer and portable host ZIP.
-- **Android direct beta:** a signed APK is the direct-download testing build.
+- **Windows:** choose the guided Windows Setup installer; the portable host ZIP is for users who prefer a manual setup.
+- **Android Direct beta:** a signed APK is the direct-download testing build. Android may ask you to allow the browser or file manager to install APKs.
 - **Google Play distribution:** temporarily shelved; Play-specific development is kept under `temporary-development/` until resumed.
 - Download only from the official JARVIS Secured release page. Android Direct packages are signed.
 
@@ -27,7 +27,7 @@ After publication, get the Windows installer or Android Direct APK from the [Git
 - Locally rendered live 3D avatars with idle, listening, thinking, and speaking states.
 - Picture attachments.
 - Installed voice selection and private custom voice-sample controls.
-- Branded launch screens.
+- A two-stage branded startup screen that shows the version and edition.
 - Web, Images, and Videos search.
 - Private SearXNG search with optional SerpAPI fallback.
 - Private messaging between paired devices.
@@ -57,15 +57,16 @@ After publication, get the Windows installer or Android Direct APK from the [Git
 
 ## Quick start
 
+See the concise [Windows and Android install guide](docs/install.md).\n
 ### Windows
 
-Download the 2.2.1 Beta Windows setup installer from [GitHub Releases](https://github.com/djjawsyettiirl/JARVIS-Secured/releases), install and launch JARVIS, then open **Settings** for pairing, search, permissions, and updates.
+Download the **Windows Setup** executable from [GitHub Releases](https://github.com/djjawsyettiirl/JARVIS-Secured/releases), run it, and follow the prompts. Launch **Assistant Jarvis** from Start. If Windows Firewall asks, allow it on your **Private** network so Android can pair.
 
 Developers can use [host/README.md](host/README.md).
 
-### Android direct beta
+### Android Direct beta
 
-Install the matching signed Android Direct APK from the same [2.2.1 Beta release](https://github.com/djjawsyettiirl/JARVIS-Secured/releases). In Windows JARVIS, generate a pairing code, then enter the host address and eight-digit code on Android.
+On the Android phone, download the **Android Direct APK** from [GitHub Releases](https://github.com/djjawsyettiirl/JARVIS-Secured/releases). Open the downloaded file and follow Android's prompts; if asked, allow your browser or file manager to install apps, then return to the APK and tap **Install**. Open JARVIS, then generate a pairing code in Windows Settings and enter the PC address and eight-digit code on Android.
 
 See [android/README.md](android/README.md) for development and LAN testing.
 
@@ -107,4 +108,4 @@ Anything intentionally paused should live under [`temporary-development/`](tempo
 
 Beta testers: please include your platform, JARVIS version, what you expected, what happened, and reproduction steps when reporting a problem.
 
-JARVIS 2.2.1 Beta is under active development. Public builds are intended to start clean: developer accounts, credentials, pairing state, messages, private memory, local uploads, and other personal runtime data are not part of the distributed package.
+JARVIS 2.2.2 Beta is being prepared. The release page shows the currently published beta until the 2.2.2 candidate clears its release gates. Public builds are intended to start clean: developer accounts, credentials, pairing state, messages, private memory, local uploads, and other personal runtime data are not part of the distributed package.
