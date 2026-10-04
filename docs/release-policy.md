@@ -12,7 +12,9 @@ Automated CI is necessary, but it does not satisfy the device and installation g
 - Model installation and inference on a Motorola Edge 2024.
 - Recovery from interrupted and corrupted model downloads.
 - Updater, migration, pairing, lifecycle and clean-install checks.
-- Final signed artifacts generated from the same commit.
+- Owner-signed release verification and final signed artifacts generated from the same commit.
+- Windows Repair Installation and supported upgrade paths.
+- Independent Android phone-only update and reconnect.
 - V2.1.1-to-V2.2 data transfer and fresh Windows pairing.
 
 The beta publishing workflow requires a manual dispatch from `main` after every gate passes. CI passing alone must never publish a release.
