@@ -205,6 +205,8 @@ def main() -> None:
     body{{display:grid;place-items:center}}
     .page{{position:absolute;text-align:center;opacity:0;transition:opacity .8s ease}}
     .page.visible{{opacity:1}}
+    #brand.visible{{animation:boot-fade .9s ease both}}
+    @keyframes boot-fade{{from{{opacity:0}}to{{opacity:1}}}}
     .brand{{font-size:42px;font-weight:700;letter-spacing:.02em;color:#f4f7fb}}
     .edition{{font-size:30px;font-weight:650;line-height:1.7;color:#f4f7fb}}
     .edition small{{display:block;font-size:15px;font-weight:500;letter-spacing:.14em;color:#91a4ba}}
