@@ -47,6 +47,24 @@ object PrivateUpdateInstaller {
         }
     }
 
+    fun verifyPublisherCertificates(context: Context, certificates: Collection<java.security.cert.Certificate>) {
+        @Suppress("DEPRECATION")
+        val flags = if (Build.VERSION.SDK_INT >= 28) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
+        @Suppress("DEPRECATION")
+        val installed = context.packageManager.getPackageInfo(context.packageName, flags)
+        val installedSigners = signerFingerprints(installed)
+        val suppliedSigners = certificates.map { certificate ->
+            certificateFingerprint(certificate.encoded)
+        }.toSet()
+        if (installedSigners.isEmpty() || suppliedSigners != installedSigners) {
+            throw SecurityException("The update manifest was not signed by the installed JARVIS publisher")
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun signerFingerprints(info: PackageInfo): Set<String> {
         val signatures = if (Build.VERSION.SDK_INT >= 28) {
@@ -54,12 +72,13 @@ object PrivateUpdateInstaller {
         } else {
             info.signatures
         } ?: return emptySet()
-        return signatures.map { signature ->
-            MessageDigest.getInstance("SHA-256")
-                .digest(signature.toByteArray())
-                .joinToString("") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
-        }.toSet()
+        return signatures.map { signature -> certificateFingerprint(signature.toByteArray()) }.toSet()
     }
+
+    private fun certificateFingerprint(encodedCertificate: ByteArray): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(encodedCertificate)
+            .joinToString("") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
 
     fun install(context: Context, apk: File) {
         verifyPackageAndSigningIdentity(context, apk)
