@@ -57,7 +57,8 @@ After publication, get the Windows installer or Android Direct APK from the [Git
 
 ## Quick start
 
-See the concise [Windows and Android install guide](docs/install.md).\n
+See the concise [Windows and Android install guide](docs/install.md).
+
 ### Windows
 
 Download the **Windows Setup** executable from [GitHub Releases](https://github.com/djjawsyettiirl/JARVIS-Secured/releases), run it, and follow the prompts. Launch **Assistant Jarvis** from Start. If Windows Firewall asks, allow it on your **Private** network so Android can pair.
@@ -86,7 +87,7 @@ For the public beta, official updates use an owner-controlled trust chain: embed
 
 ## Current limitations
 
-- This is beta software and has not yet been packaged as a mainstream consumer installer/store release.
+- This remains beta software and is not a stable store release.
 - Wake-phrase recognition is local, while command transcription depends on Android's installed speech-recognition service.
 - Android always-listening mode remains visible through its foreground-service notification.
 - Host-dependent messaging and integrations wait or queue while Windows is unreachable.
