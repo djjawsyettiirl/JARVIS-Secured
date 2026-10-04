@@ -136,9 +136,25 @@ class OfficialReleaseUpdater(context: Context) {
                 if (body.contentLength() > MAX_METADATA_BYTES) {
                     throw SecurityException("The release metadata is unexpectedly large")
                 }
-                body.string()
+                body.byteStream().use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > MAX_METADATA_BYTES) {
+                            throw SecurityException("The release metadata is unexpectedly large")
+                        }
+                        output.write(buffer, 0, count)
+                    }
+                    output.toString(Charsets.UTF_8.name())
+                }
             }
         } catch (error: ReleaseSourceUnavailable) {
+            throw error
+        } catch (error: SecurityException) {
             throw error
         } catch (error: Exception) {
             throw ReleaseSourceUnavailable("Could not reach the official JARVIS release service", error)
@@ -169,7 +185,7 @@ class OfficialReleaseUpdater(context: Context) {
                     throw ReleaseSourceUnavailable("The official JARVIS release asset could not be downloaded")
                 }
                 val body = response.body ?: throw ReleaseSourceUnavailable("The release asset was empty")
-                if (body.contentLength() !in 1..maximumBytes) {
+                if (body.contentLength() == 0L || body.contentLength() > maximumBytes) {
                     throw SecurityException("The release asset has an unexpected size")
                 }
                 body.byteStream().use { input ->
