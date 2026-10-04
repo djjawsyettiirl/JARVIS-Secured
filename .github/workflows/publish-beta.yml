@@ -145,6 +145,9 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.value }}
           SOURCE_SHA: ${{ steps.gate.outputs.sha }}
+          JARVIS_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEYSTORE_PASSWORD }}
+          JARVIS_ANDROID_KEY_ALIAS: ${{ secrets.JARVIS_ANDROID_KEY_ALIAS }}
+          JARVIS_ANDROID_KEY_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
