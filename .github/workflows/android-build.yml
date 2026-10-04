@@ -34,8 +34,29 @@ jobs:
         shell: pwsh
         run: |
           [IO.File]::WriteAllBytes('jarvis-release.jks', [Convert]::FromBase64String('${{ secrets.JARVIS_ANDROID_KEYSTORE_B64 }}'))
-      - name: Test and lint Android app
-        run: gradle testPublicBetaDirectReleaseUnitTest lintPublicBetaDirectRelease --no-daemon --stacktrace
+      - name: Test and lint Android Play and Direct editions
+        run: gradle testPublicBetaPlayReleaseUnitTest testPublicBetaDirectReleaseUnitTest lintPublicBetaPlayRelease lintPublicBetaDirectRelease --no-daemon --stacktrace
+      - name: Build signed public beta Google Play APK and AAB
+        env:
+          JARVIS_BUILD_NUMBER: ${{ github.run_number }}
+          JARVIS_KEYSTORE_PATH: ${{ github.workspace }}/android/jarvis-release.jks
+          JARVIS_KEYSTORE_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEYSTORE_PASSWORD }}
+          JARVIS_KEY_ALIAS: ${{ secrets.JARVIS_ANDROID_KEY_ALIAS }}
+          JARVIS_KEY_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEY_PASSWORD }}
+        run: gradle assemblePublicBetaPlayRelease bundlePublicBetaPlayRelease --no-daemon --stacktrace
+      - name: Stamp Google Play build identity
+        shell: pwsh
+        run: |
+          $releaseVersion = (Get-Content ../VERSION -Raw).Trim()
+          @{
+            version = $releaseVersion
+            version_code = 2000000 + [int]'${{ github.run_number }}'
+            edition = 'public_beta'
+            distribution = 'play'
+            package = 'com.jarvis.secured.beta'
+            commit = '${{ github.sha }}'
+            run_id = '${{ github.run_id }}'
+          } | ConvertTo-Json | Set-Content android-play-build.json
       - name: Build signed public beta Direct APK
         env:
           JARVIS_BUILD_NUMBER: ${{ github.run_number }}
@@ -63,7 +84,10 @@ jobs:
           name: jarvis-android-release
           path: |
             android/app/build/outputs/apk/publicBetaDirect/release/app-publicBeta-direct-release.apk
+            android/app/build/outputs/apk/publicBetaPlay/release/app-publicBeta-play-release.apk
+            android/app/build/outputs/bundle/publicBetaPlayRelease/app-publicBeta-play-release.aab
             android/android-build.json
+            android/android-play-build.json
           if-no-files-found: error
       - name: Prepare Windows companion update
         shell: pwsh
