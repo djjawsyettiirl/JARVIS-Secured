@@ -251,15 +251,16 @@ class Updater:
         extracted.mkdir(parents=True)
         with zipfile.ZipFile(outer) as archive:
             archive.extractall(extracted)
-        replacement = next(extracted.rglob("JARVIS.exe"), None)
+        replacement = next(extracted.rglob(Path(sys.executable).name), None)
         if not replacement:
-            raise FileNotFoundError("The downloaded Windows artifact did not contain JARVIS.exe")
-        companion = Path(sys.executable).with_name("JARVIS-Updater.exe")
-        if not companion.is_file():
-            raise FileNotFoundError("JARVIS-Updater.exe is missing. Install the current package manually once to enable internal updates.")
-        replacement_companion = next(extracted.rglob("JARVIS-Updater.exe"), None)
-        if replacement_companion:
-            shutil.copy2(replacement_companion, companion)
+            replacement = next(extracted.rglob("JARVIS-Beta.exe"), None)
+        if not replacement:
+            replacement = next(extracted.rglob("JARVIS.exe"), None)
+        if not replacement:
+            raise FileNotFoundError("The downloaded Windows artifact did not contain JARVIS.exe or JARVIS-Beta.exe")
+        companion = next(extracted.rglob("JARVIS-Updater.exe"), None)
+        if not companion:
+            raise FileNotFoundError("The downloaded Windows artifact did not contain JARVIS-Updater.exe")
         digest = hashlib.sha256(replacement.read_bytes()).hexdigest()
         subprocess.Popen(
             [

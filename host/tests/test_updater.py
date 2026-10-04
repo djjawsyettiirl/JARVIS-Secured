@@ -1,6 +1,8 @@
 from jarvis_host.updater import Updater
 import jarvis_host.updater as updater_module
 import json
+import zipfile
+from pathlib import Path
 import pytest
 
 
@@ -232,3 +234,30 @@ def test_new_windows_version_is_ready_even_when_old_host_rejects_android(monkeyp
 
     assert updater.status == "ready"
     assert (tmp_path / "windows" / "JARVIS-Windows-Host.zip").is_file()
+
+
+def test_windows_update_stages_beta_executable_and_runs_staged_helper(monkeypatch, tmp_path):
+    updater = Updater()
+    current = tmp_path / "install" / "JARVIS-Beta.exe"
+    current.parent.mkdir()
+    current.write_bytes(b"old")
+    updates = tmp_path / "updates"
+    package = updates / "windows"
+    package.mkdir(parents=True)
+    archive_path = package / "JARVIS-Windows-Host.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("JARVIS-Beta.exe", b"new")
+        archive.writestr("JARVIS-Updater.exe", b"helper")
+
+    monkeypatch.setattr(type(updater), "update_dir", property(lambda self: updates))
+    monkeypatch.setattr(type(updater), "old_development_dir", property(lambda self: tmp_path / "old"))
+    monkeypatch.setattr(updater_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(updater_module.sys, "executable", str(current))
+    launched = []
+    monkeypatch.setattr(updater_module.subprocess, "Popen", lambda command, **kwargs: launched.append(command))
+    monkeypatch.setattr(updater_module, "hidden_process_kwargs", lambda **kwargs: {})
+
+    assert updater.stage_windows_restart() is True
+    assert Path(launched[0][0]).name == "JARVIS-Updater.exe"
+    assert Path(launched[0][launched[0].index("--replacement") + 1]).name == "JARVIS-Beta.exe"
+    assert not (current.parent / "JARVIS-Updater.exe").exists()

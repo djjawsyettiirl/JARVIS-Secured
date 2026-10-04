@@ -1,13 +1,13 @@
 name: Publish public beta release
 
 on:
-  workflow_run:
-    workflows:
-      - Windows host build
-      - Android build
-      - Cross-platform version consistency
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      all_release_gates_passed:
+        description: Confirm every documented V2.2 device, install, migration, pairing, signing, and CI gate has passed for this commit.
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   publish:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.all_release_gates_passed == true }}
     runs-on: ubuntu-latest
     steps:
       - name: Wait for all release gates on this exact commit
@@ -27,7 +27,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const sha = context.payload.workflow_run.head_sha;
+            const sha = context.sha;
             const required = [
               ".github/workflows/windows-build.yml",
               ".github/workflows/android-build.yml",
@@ -106,6 +106,22 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Set up release manifest signing tools
+        if: steps.gate.outputs.ready == 'true' && steps.existing.outputs.exists == 'false'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Restore Android publisher signing key
+        if: steps.gate.outputs.ready == 'true' && steps.existing.outputs.exists == 'false'
+        env:
+          JARVIS_ANDROID_KEYSTORE_B64: ${{ secrets.JARVIS_ANDROID_KEYSTORE_B64 }}
+        shell: bash
+        run: |
+          printf '%s' "$JARVIS_ANDROID_KEYSTORE_B64" | base64 --decode > android-release.jks
+          test -s android-release.jks
+
       - name: Download Windows build
         if: steps.gate.outputs.ready == 'true' && steps.existing.outputs.exists == 'false'
         uses: actions/download-artifact@v4
@@ -129,6 +145,9 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.value }}
           SOURCE_SHA: ${{ steps.gate.outputs.sha }}
+          JARVIS_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEYSTORE_PASSWORD }}
+          JARVIS_ANDROID_KEY_ALIAS: ${{ secrets.JARVIS_ANDROID_KEY_ALIAS }}
+          JARVIS_ANDROID_KEY_PASSWORD: ${{ secrets.JARVIS_ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
@@ -159,23 +178,58 @@ jobs:
           if mismatches:
               raise SystemExit(f"Android build identity mismatch: {mismatches}")
           PY
-          mkdir -p release-assets
+          mkdir -p release-assets/manifest-payload
           cp "$windows_installer" "release-assets/JARVIS-$VERSION-Windows-Setup.exe"
           cp "$windows_zip" "release-assets/JARVIS-$VERSION-Windows-Host.zip"
           cp "$android_apk" "release-assets/JARVIS-$VERSION-Android-Direct.apk"
-          (
-            cd release-assets
-            sha256sum * > SHA256SUMS.txt
-          )
+          python3 - "$android_identity" "$VERSION" "$SOURCE_SHA" "release-assets/JARVIS-$VERSION-Android-Direct.apk" "release-assets/manifest-payload/release-manifest.json" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+
+          identity_path, version, commit, apk_path, output_path = sys.argv[1:]
+          identity = json.loads(Path(identity_path).read_text(encoding="utf-8"))
+          apk = Path(apk_path)
+          digest = hashlib.sha256()
+          with apk.open("rb") as stream:
+              for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                  digest.update(chunk)
+          manifest = {
+              "repository": "djjawsyettiirl/JARVIS-Secured",
+              "tag": f"v{version}",
+              "version": version,
+              "version_code": int(identity["version_code"]),
+              "commit": commit,
+              "edition": "public_beta",
+              "distribution": "direct",
+              "package": "com.jarvis.secured.beta.direct",
+              "artifact": apk.name,
+              "sha256": digest.hexdigest(),
+          }
+          Path(output_path).write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+          jar --create --file release-assets/UPDATE-MANIFEST.jar -C release-assets/manifest-payload release-manifest.json
+          jarsigner \
+            -keystore android-release.jks \
+            -storepass:env JARVIS_ANDROID_KEYSTORE_PASSWORD \
+            -keypass:env JARVIS_ANDROID_KEY_PASSWORD \
+            release-assets/UPDATE-MANIFEST.jar "$JARVIS_ANDROID_KEY_ALIAS"
+          jarsigner -verify -certs release-assets/UPDATE-MANIFEST.jar
           cat > release-assets/RELEASE-NOTES.txt <<EOF
           JARVIS $VERSION public beta
           Source commit: $SOURCE_SHA
 
           Windows: run the Windows setup executable.
-          Android Direct: install the signed APK. Google Play distribution is not included.
+          Android Direct: install the signed APK. Once installed, Android Direct can check and install newer official releases without a Windows PC.
+          Google Play distribution is not included.
           Verify files with SHA256SUMS.txt.
           Beta software; expect bugs. Report reproducible issues through GitHub Issues.
           EOF
+          (
+            cd release-assets
+            sha256sum "JARVIS-$VERSION-Windows-Setup.exe" "JARVIS-$VERSION-Windows-Host.zip" "JARVIS-$VERSION-Android-Direct.apk" UPDATE-MANIFEST.jar RELEASE-NOTES.txt > SHA256SUMS.txt
+          )
 
       - name: Publish GitHub prerelease
         if: steps.gate.outputs.ready == 'true' && steps.existing.outputs.exists == 'false'
@@ -185,4 +239,4 @@ jobs:
           VERSION: ${{ steps.version.outputs.value }}
           SOURCE_SHA: ${{ steps.gate.outputs.sha }}
         run: |
-          gh release create "$TAG" release-assets/* --title "JARVIS $VERSION Beta" --prerelease --target "$SOURCE_SHA" --notes "Automated beta release from tested commit $SOURCE_SHA. Windows installer, Windows host ZIP, and signed Android Direct APK are attached."
+          gh release create "$TAG" release-assets/* --title "JARVIS $VERSION Beta" --prerelease --target "$SOURCE_SHA" --notes "Automated beta release from tested commit $SOURCE_SHA. Windows installer, Windows host ZIP, signed Android Direct APK, and publisher-signed update manifest are attached."

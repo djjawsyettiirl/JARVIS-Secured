@@ -67,7 +67,7 @@ jobs:
           DefaultDirName={autopf}\\JARVIS Secured Beta
           DefaultGroupName=JARVIS Secured Beta
           OutputDir=installer-output
-          OutputBaseFilename=JARVIS-2.2.1-Beta-Windows-Setup
+          OutputBaseFilename=JARVIS-{{VERSION}}-Windows-Setup
           Compression=lzma2
           SolidCompression=yes
           WizardStyle=modern
@@ -94,7 +94,8 @@ jobs:
       - name: Verify Windows installer
         shell: pwsh
         run: |
-          if (-not (Test-Path 'installer-output/JARVIS-2.2.1-Beta-Windows-Setup.exe')) { throw 'Windows installer was not produced' }
+          $releaseVersion = (Get-Content VERSION -Raw).Trim()
+          if (-not (Test-Path "installer-output/JARVIS-$releaseVersion-Windows-Setup.exe")) { throw 'Windows installer was not produced' }
       - name: Prepare package
         shell: pwsh
         run: |

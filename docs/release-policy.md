@@ -2,6 +2,23 @@
 
 JARVIS uses the root `VERSION` file as the only release-version authority.
 
+## V2.2 manual release gates
+
+Automated CI is necessary, but it does not satisfy the device and installation gates. Before merging or publishing a V2.2 release, record passing evidence for all of the following on the candidate commit:
+
+- Android tests, lint, signed Direct APK and Play AAB jobs.
+- Windows tests, packaged smoke tests and installer/artifact jobs.
+- Shared version consistency.
+- Model installation and inference on a Motorola Edge 2024.
+- Recovery from interrupted and corrupted model downloads.
+- Updater, migration, pairing, lifecycle and clean-install checks.
+- Owner-signed release verification and final signed artifacts generated from the same commit.
+- Windows Repair Installation and supported upgrade paths.
+- Independent Android phone-only update and reconnect.
+- V2.1.1-to-V2.2 data transfer and fresh Windows pairing.
+
+The beta publishing workflow requires a manual dispatch from `main` after every gate passes. CI passing alone must never publish a release.
+
 ## Required rules
 
 1. Windows, Android Play, and Android Direct ship under the same semantic version.

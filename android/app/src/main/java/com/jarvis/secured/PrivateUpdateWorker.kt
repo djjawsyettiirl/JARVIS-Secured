@@ -13,9 +13,19 @@ import java.util.concurrent.TimeUnit
 
 class PrivateUpdateWorker(appContext: Context, params: WorkerParameters) : Worker(appContext, params) {
     override fun doWork(): Result = try {
-        BackgroundJarvisClient(applicationContext).downloadUpdateIfAvailable()?.let {
-            PrivateUpdateInstaller.install(applicationContext, it)
+        val directPublicEdition =
+            BuildConfig.JARVIS_EDITION == "public_beta" &&
+                BuildConfig.JARVIS_DISTRIBUTION == "direct"
+        val update = if (directPublicEdition) {
+            try {
+                OfficialReleaseUpdater(applicationContext).downloadIfAvailable()
+            } catch (_: ReleaseSourceUnavailable) {
+                null
+            }
+        } else {
+            BackgroundJarvisClient(applicationContext).downloadUpdateIfAvailable()
         }
+        update?.let { PrivateUpdateInstaller.install(applicationContext, it) }
         Result.success()
     } catch (_: Exception) {
         Result.retry()

@@ -92,16 +92,24 @@ def _startup_log(message: str) -> None:
 
 
 def _show_main_window(window) -> None:
-    """Make packaged launches visible even when a hidden updater is the ancestor."""
+    """Show the Windows boot pages before opening the assistant."""
     try:
         time.sleep(0.5)
         window.show()
-        window.load_url("http://127.0.0.1:8766/assistant-v1")
-        _startup_log("main window shown")
+        try:
+            window.evaluate_js(
+                "setTimeout(() => { window.location.href = 'http://127.0.0.1:8766/assistant-v1'; }, 11800)"
+            )
+        except Exception:
+            threading.Timer(
+                11.8,
+                lambda: window.load_url("http://127.0.0.1:8766/assistant-v1")
+                if not _exit_requested.is_set()
+                else None,
+            ).start()
+        _startup_log("Windows boot screen shown")
     except Exception:
         _startup_log("main window show failed\n" + traceback.format_exc())
-
-
 
 def _tray_image() -> Image.Image:
     icon_path = Path(__file__).resolve().parent / "assets" / "jarvis.ico"
@@ -192,11 +200,27 @@ def main() -> None:
     )
     threading.Thread(target=gateway_server.run, daemon=True).start()
 
-    startup_html = f"""<!doctype html><html><head><meta charset='utf-8'><style>
-    html,body{{height:100%;margin:0;background:#02060b;color:#9beaff;font-family:'Segoe UI',sans-serif}}
-    body{{display:grid;place-items:center}}.core{{width:92px;height:92px;border:2px solid #37d7ff;border-right-color:transparent;border-radius:50%;box-shadow:0 0 48px #37d7ff88;animation:spin 1.1s linear infinite}}
-    .label{{margin-top:24px;text-align:center;letter-spacing:.25em;font-size:12px}}@keyframes spin{{to{{transform:rotate(360deg)}}}}
-    </style></head><body><div><div class='core'></div><div class='label'>INITIALIZING JARVIS V {VERSION}</div></div></body></html>"""
+    startup_html = f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>
+    html,body{{height:100%;margin:0;background:#070b12;color:#f4f7fb;font-family:'Segoe UI',sans-serif}}
+    body{{display:grid;place-items:center}}
+    .page{{position:absolute;text-align:center;opacity:0;transition:opacity .8s ease}}
+    .page.visible{{opacity:1}}
+    #brand.visible{{animation:boot-fade .9s ease both}}
+    @keyframes boot-fade{{from{{opacity:0}}to{{opacity:1}}}}
+    .brand{{font-size:42px;font-weight:700;letter-spacing:.02em;color:#f4f7fb}}
+    .edition{{font-size:30px;font-weight:650;line-height:1.7;color:#f4f7fb}}
+    .edition small{{display:block;font-size:15px;font-weight:500;letter-spacing:.14em;color:#91a4ba}}
+    .accent{{width:64px;height:3px;margin:18px auto 0;border-radius:4px;background:#3979ef;box-shadow:0 0 24px #3979ef88}}
+    @media(max-width:600px){{.brand{{font-size:32px}}.edition{{font-size:24px}}}}
+    </style></head><body>
+    <div id="brand" class="page brand visible">Assistant Jarvis<div class="accent"></div></div>
+    <div id="version" class="page edition">Version {VERSION}<small>Windows Edition</small><div class="accent"></div></div>
+    <script>
+    setTimeout(() => {{
+      document.getElementById('brand').classList.remove('visible');
+      document.getElementById('version').classList.add('visible');
+    }}, 1800);
+    </script></body></html>"""
     window = webview.create_window(
         f"Assistant Jarvis · V {VERSION}",
         html=startup_html,
