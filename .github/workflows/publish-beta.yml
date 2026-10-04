@@ -210,7 +210,7 @@ jobs:
           Path(output_path).write_text(json.dumps(manifest, sort_keys=True) + "\\n", encoding="utf-8")
           PY
           jar --create --file release-assets/UPDATE-MANIFEST.jar -C release-assets/manifest-payload release-manifest.json
-          jarsigner \\
+          jarsigner \
             -keystore android-release.jks \\
             -storepass:env JARVIS_ANDROID_KEYSTORE_PASSWORD \\
             -keypass:env JARVIS_ANDROID_KEY_PASSWORD \\
