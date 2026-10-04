@@ -207,13 +207,13 @@ jobs:
               "artifact": apk.name,
               "sha256": digest.hexdigest(),
           }
-          Path(output_path).write_text(json.dumps(manifest, sort_keys=True) + "\\n", encoding="utf-8")
+          Path(output_path).write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
           PY
           jar --create --file release-assets/UPDATE-MANIFEST.jar -C release-assets/manifest-payload release-manifest.json
           jarsigner \
-            -keystore android-release.jks \\
-            -storepass:env JARVIS_ANDROID_KEYSTORE_PASSWORD \\
-            -keypass:env JARVIS_ANDROID_KEY_PASSWORD \\
+            -keystore android-release.jks \
+            -storepass:env JARVIS_ANDROID_KEYSTORE_PASSWORD \
+            -keypass:env JARVIS_ANDROID_KEY_PASSWORD \
             release-assets/UPDATE-MANIFEST.jar "$JARVIS_ANDROID_KEY_ALIAS"
           jarsigner -verify -certs release-assets/UPDATE-MANIFEST.jar
           cat > release-assets/RELEASE-NOTES.txt <<EOF
