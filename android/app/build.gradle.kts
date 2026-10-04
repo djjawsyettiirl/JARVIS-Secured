@@ -84,4 +84,5 @@ dependencies {
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
     implementation("com.google.mediapipe:tasks-genai:0.10.35")
     implementation("com.google.mediapipe:tasks-vision-image-generator:0.10.26.1")
+    testImplementation("junit:junit:4.13.2")
 }
