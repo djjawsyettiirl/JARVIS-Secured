@@ -29,3 +29,25 @@ def test_companion_force_closes_and_replaces_jarvis(monkeypatch, tmp_path):
     assert commands[0] == ["taskkill", "/F", "/IM", "JARVIS.exe"]
     assert options[0]["creationflags"] == 321
     assert launched == [str(current)]
+
+
+def test_companion_replaces_beta_executable_and_targets_its_process(monkeypatch, tmp_path):
+    current = tmp_path / "JARVIS-Beta.exe"
+    replacement_dir = tmp_path / "staged"
+    replacement_dir.mkdir()
+    replacement = replacement_dir / "JARVIS-Beta.exe"
+    current.write_bytes(b"old")
+    replacement.write_bytes(b"new")
+    commands = []
+    launched = []
+
+    monkeypatch.setattr(run_updater, "hidden_process_kwargs", lambda **kwargs: {})
+    monkeypatch.setattr(run_updater.subprocess, "run", lambda command, **kwargs: commands.append(command))
+    monkeypatch.setattr(run_updater.os, "startfile", lambda path: launched.append(path), raising=False)
+    monkeypatch.setattr(run_updater.time, "sleep", lambda seconds: None)
+
+    run_updater.apply_update(current, replacement, hashlib.sha256(b"new").hexdigest())
+
+    assert commands[0] == ["taskkill", "/F", "/IM", "JARVIS-Beta.exe"]
+    assert current.read_bytes() == b"new"
+    assert launched == [str(current)]
