@@ -35,12 +35,14 @@ android {
         create("play") {
             dimension = "distribution"
             buildConfigField("boolean", "ADULT_MODE_AVAILABLE", "false")
+            buildConfigField("String", "JARVIS_DISTRIBUTION", "\"play\"")
         }
         create("direct") {
             dimension = "distribution"
             applicationIdSuffix = ".direct"
             versionNameSuffix = "-direct"
             buildConfigField("boolean", "ADULT_MODE_AVAILABLE", "true")
+            buildConfigField("String", "JARVIS_DISTRIBUTION", "\"direct\"")
         }
     }
 
