@@ -1,1 +1,188 @@
-cat: /tmp/publish-beta.yml: No such file or directory
+name: Publish public beta release
+
+on:
+  workflow_run:
+    workflows:
+      - Windows host build
+      - Android build
+      - Cross-platform version consistency
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: jarvis-public-beta-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for all release gates on this exact commit
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.payload.workflow_run.head_sha;
+            const required = [
+              ".github/workflows/windows-build.yml",
+              ".github/workflows/android-build.yml",
+              ".github/workflows/version-consistency.yml",
+            ];
+            const deadline = Date.now() + 10 * 60 * 1000;
+            while (Date.now() < deadline) {
+              const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head_sha: sha,
+                per_page: 100,
+              });
+              const matched = data.workflow_runs.filter((run) =>
+                required.includes(run.path) &&
+                run.head_sha === sha &&
+                run.event === "push" &&
+                run.head_branch === "main"
+              );
+              const byPath = new Map();
+              for (const run of matched) {
+                const previous = byPath.get(run.path);
+                if (!previous || Date.parse(run.created_at) > Date.parse(previous.created_at)) {
+                  byPath.set(run.path, run);
+                }
+              }
+              const complete = required.map((path) => byPath.get(path));
+              if (complete.every((run) => run?.conclusion === "success")) {
+                core.setOutput("ready", "true");
+                core.setOutput("windows_run_id", String(byPath.get(required[0]).id));
+                core.setOutput("android_run_id", String(byPath.get(required[1]).id));
+                core.setOutput("sha", sha);
+                return;
+              }
+              if (complete.some((run) => run && ["failure", "cancelled", "timed_out"].includes(run.conclusion))) {
+                core.notice("At least one release gate failed for this commit; no release will be published.");
+                core.setOutput("ready", "false");
+                return;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 15000));
+            }
+            core.notice("Release gates did not all pass within 10 minutes; no release will be published.");
+            core.setOutput("ready", "false");
+
+      - name: Check out the tested commit
+        if: steps.gate.outputs.ready == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.gate.outputs.sha }}
+          persist-credentials: false
+
+      - name: Read release version
+        if: steps.gate.outputs.ready == 'true'
+        id: version
+        shell: bash
+        run: |
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid beta VERSION: $version"
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version is already published
+        if: steps.gate.outputs.ready == 'true'
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists; preserving its published assets."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download Windows build
+        if: steps.gate.outputs.ready == 'true' && steps.existing.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          name: jarvis-windows-host
+          path: artifacts/windows
+          run-id: ${{ steps.gate.outputs.windows_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download Android build
+        if: steps.gate.outputs.ready == 'true' && steps.existing.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          name: jarvis-android-release
+          path: artifacts/android
+          run-id: ${{ steps.gate.outputs.android_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Verify packages and prepare release assets
+        if: steps.gate.outputs.ready == 'true' && steps.existing.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          SOURCE_SHA: ${{ steps.gate.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          windows_installer="$(find artifacts/windows -type f -name '*Windows-Setup.exe' -print -quit)"
+          windows_zip="$(find artifacts/windows -type f -name 'JARVIS-Windows-Host.zip' -print -quit)"
+          android_apk="$(find artifacts/android -type f -name 'app-publicBeta-direct-release.apk' -print -quit)"
+          android_identity="$(find artifacts/android -type f -name 'android-build.json' -print -quit)"
+          for file in "$windows_installer" "$windows_zip" "$android_apk" "$android_identity"; do
+            if [[ -z "$file" || ! -f "$file" ]]; then
+              echo "Required release package is missing: $file"
+              exit 1
+            fi
+          done
+          python3 - "$android_identity" "$VERSION" "$SOURCE_SHA" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          identity = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          version, commit = sys.argv[2:]
+          expected = {
+              "version": version,
+              "commit": commit,
+              "edition": "public_beta",
+              "distribution": "direct",
+              "package": "com.jarvis.secured.beta.direct",
+          }
+          mismatches = {key: (identity.get(key), value) for key, value in expected.items() if identity.get(key) != value}
+          if mismatches:
+              raise SystemExit(f"Android build identity mismatch: {mismatches}")
+          PY
+          mkdir -p release-assets
+          cp "$windows_installer" "release-assets/JARVIS-$VERSION-Windows-Setup.exe"
+          cp "$windows_zip" "release-assets/JARVIS-$VERSION-Windows-Host.zip"
+          cp "$android_apk" "release-assets/JARVIS-$VERSION-Android-Direct.apk"
+          (
+            cd release-assets
+            sha256sum * > SHA256SUMS.txt
+          )
+          cat > release-assets/RELEASE-NOTES.txt <<EOF
+          JARVIS $VERSION public beta
+          Source commit: $SOURCE_SHA
+
+          Windows: run the Windows setup executable.
+          Android Direct: install the signed APK. Google Play distribution is not included.
+          Verify files with SHA256SUMS.txt.
+          Beta software; expect bugs. Report reproducible issues through GitHub Issues.
+          EOF
+
+      - name: Publish GitHub prerelease
+        if: steps.gate.outputs.ready == 'true' && steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.value }}
+          SOURCE_SHA: ${{ steps.gate.outputs.sha }}
+        run: |
+          gh release create "$TAG" release-assets/* --title "JARVIS $VERSION Beta" --prerelease --target "$SOURCE_SHA" --notes "Automated beta release from tested commit $SOURCE_SHA. Windows installer, Windows host ZIP, and signed Android Direct APK are attached."
