@@ -2,7 +2,9 @@
 
 JARVIS is a multi-device AI assistant built around a Windows host and a securely paired Android companion.
 
-> **Current public beta: 2.2.1-beta**
+> **Beta build: 2.2.1-beta**
+>
+> The Windows installer and signed Android Direct APK will be posted on GitHub Releases after the Windows, Android, and version checks pass for the same commit.
 >
 > **Beta software:** expect bugs. Please report reproducible issues through GitHub Issues.
 
@@ -10,12 +12,12 @@ JARVIS is a multi-device AI assistant built around a Windows host and a securely
 
 The goal of 2.2.1 Beta is to make testing straightforward for people who do not want to build JARVIS from source.
 
-- **Windows:** a proper installer is being prepared from the packaged Windows binary.
+- **Windows:** the Windows build produces a setup installer and portable host ZIP.
 - **Android direct beta:** a signed APK is the direct-download testing build.
 - **Google Play distribution:** temporarily shelved; Play-specific development is kept under `temporary-development/` until resumed.
-- Use only packages produced by this repository's signed build workflows.
+- Download only from the official JARVIS Secured release page. Android Direct packages are signed.
 
-When public GitHub Release assets are published, use the **Releases** page rather than downloading source-code archives.
+After publication, get the Windows installer or Android Direct APK from the [GitHub Releases page](https://github.com/djjawsyettiirl/JARVIS-Secured/releases). Each beta release includes SHA-256 checksums and the source commit.
 
 ## What works today
 
@@ -57,13 +59,13 @@ When public GitHub Release assets are published, use the **Releases** page rathe
 
 ### Windows
 
-Install the 2.2.1 Beta Windows package when it appears under GitHub Releases, launch JARVIS, then open **Settings** for pairing, search, permissions, and updates.
+Download the 2.2.1 Beta Windows setup installer from [GitHub Releases](https://github.com/djjawsyettiirl/JARVIS-Secured/releases), install and launch JARVIS, then open **Settings** for pairing, search, permissions, and updates.
 
 Developers can use [host/README.md](host/README.md).
 
 ### Android direct beta
 
-Install the matching signed direct APK from the same 2.2.1 Beta release. In Windows JARVIS, generate a pairing code, then enter the host address and eight-digit code on Android.
+Install the matching signed Android Direct APK from the same [2.2.1 Beta release](https://github.com/djjawsyettiirl/JARVIS-Secured/releases). In Windows JARVIS, generate a pairing code, then enter the host address and eight-digit code on Android.
 
 See [android/README.md](android/README.md) for development and LAN testing.
 
