@@ -8,7 +8,7 @@
 4. Open **Assistant Jarvis** and review Android's permission prompts. Allow only the capabilities you want to use.
 5. On Windows, generate a one-time pairing code under **Settings → Pairing**. Enter the Windows PC's LAN address and the code in Android JARVIS.
 
-The **Direct Edition** is the unrestricted Android beta build. Google Play distribution is temporarily shelved. See the [Windows and Android install guide](../docs/install.md) for pairing and troubleshooting.
+The **Direct Edition** is the unrestricted Android beta build. After installing a build that includes the standalone updater, it checks the official signed GitHub release channel and can download and install future Direct updates without a Windows PC. Android will ask you to confirm each installation. The first move from an older build may require installing the current APK once from the Releases page. Google Play distribution is temporarily shelved. See the [Windows and Android install guide](../docs/install.md) for pairing and troubleshooting.
 
 ## Build
 
