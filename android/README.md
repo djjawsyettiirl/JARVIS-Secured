@@ -1,5 +1,15 @@
 # JARVIS Android client
 
+## Install the public Direct beta
+
+1. Open the [JARVIS GitHub Releases page](https://github.com/djjawsyettiirl/JARVIS-Secured/releases) on your Android phone.
+2. Download the asset named **Android Direct APK** for the published version.
+3. Open the APK. If Android asks, allow your browser or file manager to install apps from that source, then return and tap **Install**.
+4. Open **Assistant Jarvis** and review Android's permission prompts. Allow only the capabilities you want to use.
+5. On Windows, generate a one-time pairing code under **Settings → Pairing**. Enter the Windows PC's LAN address and the code in Android JARVIS.
+
+The **Direct Edition** is the unrestricted Android beta build. Google Play distribution is temporarily shelved. See the [Windows and Android install guide](../docs/install.md) for pairing and troubleshooting.
+
 ## Build
 
 Open the `android/` folder in Android Studio. Let Gradle sync, then connect the Motorola Edge 2024 with USB debugging enabled and press Run.
