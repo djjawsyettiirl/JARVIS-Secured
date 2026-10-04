@@ -16,16 +16,15 @@ class PrivateUpdateWorker(appContext: Context, params: WorkerParameters) : Worke
         val directPublicEdition =
             BuildConfig.JARVIS_EDITION == "public_beta" &&
                 BuildConfig.JARVIS_DISTRIBUTION == "direct"
-        val officialUpdate = if (directPublicEdition) {
+        val update = if (directPublicEdition) {
             try {
                 OfficialReleaseUpdater(applicationContext).downloadIfAvailable()
             } catch (_: ReleaseSourceUnavailable) {
                 null
             }
         } else {
-            null
+            BackgroundJarvisClient(applicationContext).downloadUpdateIfAvailable()
         }
-        val update = officialUpdate ?: BackgroundJarvisClient(applicationContext).downloadUpdateIfAvailable()
         update?.let { PrivateUpdateInstaller.install(applicationContext, it) }
         Result.success()
     } catch (_: Exception) {
