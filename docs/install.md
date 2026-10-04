@@ -20,7 +20,7 @@ The portable **Windows Host ZIP** is provided for users who prefer to extract an
 4. Open **Assistant Jarvis** and review the Android permission prompts. Allow only the features you want to use; you can change permissions later in Android Settings.
 5. On Windows, create a pairing code under **Settings → Pairing**. On Android, enter the Windows PC's LAN address and the eight-digit code.
 
-The **Direct Edition** is the unrestricted Android beta build. Google Play distribution is temporarily shelved; a Google Play Edition is shown by builds installed from Google Play when that distribution resumes.
+The **Direct Edition** is the unrestricted Android beta build. After you install a build with the standalone updater, it checks the official signed GitHub release channel for updates and can download them without a Windows PC. Android asks you to confirm installation. To move from an older build that lacks this updater, install the current APK once from the Releases page. Google Play distribution is temporarily shelved; a Google Play Edition is shown by builds installed from Google Play when that distribution resumes.
 
 ## Pairing
 
