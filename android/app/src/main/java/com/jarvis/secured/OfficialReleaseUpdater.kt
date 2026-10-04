@@ -228,16 +228,6 @@ class OfficialReleaseUpdater(context: Context) {
         if (!valid) throw SecurityException("The signed release manifest does not match this JARVIS edition")
     }
 
-    internal fun isOfficialReleaseAsset(url: String, tag: String, assetName: String): Boolean {
-        val parsed = url.toHttpUrlOrNull() ?: return false
-        val expectedPath = "/$OFFICIAL_REPOSITORY/releases/download/$tag/$assetName"
-        return parsed.scheme == "https" &&
-            parsed.host == "github.com" &&
-            parsed.encodedPath == expectedPath &&
-            parsed.query == null &&
-            parsed.fragment == null
-    }
-
     private fun sha256(file: File): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         file.inputStream().buffered().use { input ->
@@ -265,6 +255,16 @@ class OfficialReleaseUpdater(context: Context) {
             "release-assets.githubusercontent.com",
             "objects.githubusercontent.com"
         )
+        internal fun isOfficialReleaseAsset(url: String, tag: String, assetName: String): Boolean {
+            val parsed = url.toHttpUrlOrNull() ?: return false
+            val expectedPath = "/$OFFICIAL_REPOSITORY/releases/download/$tag/$assetName"
+            return parsed.scheme == "https" &&
+                parsed.host == "github.com" &&
+                parsed.encodedPath == expectedPath &&
+                parsed.query == null &&
+                parsed.fragment == null
+        }
+
         private val TAG_PATTERN = Regex("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$")
         private val SHA256_PATTERN = Regex("^[0-9a-fA-F]{64}$")
         private val COMMIT_PATTERN = Regex("^[0-9a-fA-F]{40}$")
