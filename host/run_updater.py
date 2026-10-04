@@ -77,7 +77,9 @@ def apply_update(current: Path, replacement: Path, expected_sha256: str, archive
 
 def _ensure_elevated(arguments: list[str], current: Path) -> bool:
     """Request the permission needed to replace an install under Program Files."""
-    if os.name != "nt" or ctypes.windll.shell32.IsUserAnAdmin():
+    if os.name != "nt" or os.access(current.resolve().parent, os.W_OK):
+        return True
+    if ctypes.windll.shell32.IsUserAnAdmin():
         return True
     command_line = subprocess.list2cmdline(arguments)
     result = ctypes.windll.shell32.ShellExecuteW(
